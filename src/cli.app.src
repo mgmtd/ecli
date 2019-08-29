@@ -1,0 +1,16 @@
+{application, cli,
+ [{description, "Command line handling"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, { cli_app, []}},
+  {applications,
+   [kernel,
+    stdlib
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
