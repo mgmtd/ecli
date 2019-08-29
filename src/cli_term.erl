@@ -176,9 +176,10 @@ ins_chars(Chars, Aft, #term{lpos = Lpos, llen = Llen} = T) ->
     %% Write the characters then write the whole of after again and
     %% move the cursor
     NumChars = length(Chars),
-    {Move, _} = move_cursor(Lpos + NumChars, Lpos, T),
+    Lpos1 = Lpos + NumChars,
+    {Move, _} = move_cursor(Lpos + NumChars + length(Aft), Lpos1, T),
     {[Chars, Aft, Move],
-     T#term{lpos = Lpos + NumChars,
+     T#term{lpos = Lpos1,
             llen = Llen + NumChars}}.
 
 %% Delete characters in the buffer. Can delete characters before (N < 0)
