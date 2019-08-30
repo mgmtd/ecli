@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, notify_connection_established/1]).
+-export([start_link/0, start_link/1, notify_connection_established/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,6 +37,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+start_link() ->
+    start_link("/tmp/socket-server").
+
 start_link(Path) ->
     ProcName = list_to_atom("cli_unixdom_" ++ filename:basename(Path)),
     gen_server:start_link({local, ProcName}, ?MODULE, [Path], []).
