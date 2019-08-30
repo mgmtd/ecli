@@ -118,7 +118,9 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false} = State) ->
     io:format("GOT initial ~p~n",[Data]),
-    Term = cli_term:new(Data, <<">">>),
+    Prompt = initial_prompt(),
+    {ok, {InitialData, Term}} = cli_term:new(Data, Prompt),
+    ok = gen_tcp:send(Socket, InitialData),
     inet:setopts(Socket, [{active, once}]),
     {noreply, State#state{got_meta = true, term = Term}};
 handle_info({tcp, Socket, Data}, #state{buf = Buf} = State) ->
@@ -156,9 +158,10 @@ handle_info({tcp, Socket, Data}, #state{buf = Buf} = State) ->
             io:format("CMD: ~p~n",[FullLine]),
             {Bytes, Term} = cli_term:send_ops(Ops, State#state.term),
             ok = gen_tcp:send(Socket, Bytes),
-            ok = gen_tcp:send(Socket, "[ok]\r\n"),
             inet:setopts(Socket, [{active, once}]),
-            {noreply, State#state{buf = Buf1, term = Term}}
+            {noreply, State#state{buf = Buf1,
+                                  term = Term,
+                                  edlin = cli_edlin:new()}}
     end;
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -192,3 +195,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+initial_prompt() ->
+    case inet:gethostname() of
+        {ok, Hostname} ->
+            H = unicode:characters_to_binary(Hostname, utf8),
+            <<H/binary, "> ">>;
+        _ ->
+            <<"> ">>
+    end.
