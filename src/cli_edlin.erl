@@ -16,37 +16,41 @@
           requests = []
         }).
 
+%%--------------------------------------------------------------------
+%% Create a new instance of edlin.
+%% --------------------------------------------------------------------
+-spec new() -> #edlin{}.
 new() ->
     #edlin{}.
 
-insert([C|Chars], #edlin{state = State, line = {Bef, Aft}} = Ed) ->
+insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
+                      requests = Rs0} = Ed) ->
     case key_map(C, State) of
         meta ->
-            insert(Chars, Ed#edlin{state = meta});
+            insert(Cs, Ed#edlin{state = meta});
         meta_o ->
-            insert(Chars, Ed#edlin{state = meta_o});
+            insert(Cs, Ed#edlin{state = meta_o});
         meta_csi ->
-            insert(Chars, Ed#edlin{state = meta_csi});
+            insert(Cs, Ed#edlin{state = meta_csi});
         meta_meta ->
-            insert(Chars, Ed#edlin{state = meta_meta});
+            insert(Cs, Ed#edlin{state = meta_meta});
         {csi, _} = Csi ->
-            insert(Chars, Ed#edlin{state = Csi});
+            insert(Cs, Ed#edlin{state = Csi});
         meta_left_sq_bracket ->
-            insert(Chars, Ed#edlin{state = meta_left_sq_bracket});
+            insert(Cs, Ed#edlin{state = meta_left_sq_bracket});
         new_line ->
-            {done, get_line(Bef, Aft), Chars, [crnl]};
+            {done, get_line(Bef, Aft), Cs, [crnl]};
         tab_expand ->
-            % call callback for expansion
-            insert(Chars, Ed#edlin{state = none});
+            {expand, Bef, Cs, Ed#edlin{state = none}};
         {undefined,C} ->
-            insert(Chars, Ed#edlin{state = none});
+            insert(Cs, Ed#edlin{state = none});
         Op ->
-            case do_op(Op, Bef, Aft, Ed#edlin.requests) of
+            case do_op(Op, Bef, Aft, Rs0) of
                 {Line, Rs, Mode} -> % allow custom modes from do_op
-                    insert(Chars, Ed#edlin{line = Line, state = Mode,
+                    insert(Cs, Ed#edlin{line = Line, state = Mode,
                                            requests = Rs});
                 {Line, Rs} ->
-                    insert(Chars, Ed#edlin{line = Line, state = none, requests = Rs})
+                    insert(Cs, Ed#edlin{line = Line, state = none, requests = Rs})
             end
     end;
 insert([], #edlin{requests = Rs} = Ed) ->
