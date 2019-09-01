@@ -9,6 +9,7 @@
 -module(cli_juniper).
 
 -export([init/0,
+         banner/1,
          prompt/1,
          expand/2
         ]).
@@ -20,6 +21,10 @@
 
 init() ->
     {ok, #cli_juniper{}}.
+
+banner(#cli_juniper{}) ->
+    {ok, "\r\nWelcome to the Juniper style CLI\r\n
+Hit TAB, SPC or ? at any time to see available commands\r\n"}.
 
 prompt(#cli_juniper{mode = operational}) ->
     case inet:gethostname() of
@@ -33,3 +38,4 @@ prompt(#cli_juniper{mode = operational}) ->
 
 expand(Chars, #cli_juniper{} = J) ->
     {no, [], [], J}.
+

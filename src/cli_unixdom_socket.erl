@@ -124,6 +124,8 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
 handle_info({tcp, Socket, Data}, #state{got_meta = false, user_mod = UserMod} = State) ->
     io:format("GOT initial ~p~n",[Data]),
     {ok, Prompt} = UserMod:prompt(State#state.user_state),
+    {ok, Banner} = UserMod:banner(State#state.user_state),
+    ok = gen_tcp:send(Socket, Banner),
     {ok, {InitialData, Term}} = cli_term:new(Data, Prompt),
     ok = gen_tcp:send(Socket, InitialData),
     inet:setopts(Socket, [{active, once}]),
