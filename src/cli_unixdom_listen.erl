@@ -97,7 +97,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast(connected, #state{user_mod = Mod, listen_socket = Ls} = State) ->
-    AcceptorPid = cli_unixdom_socket:start_link(self(), Ls, Mod),
+    AcceptorPid = cli_server:start_link(self(), Ls, Mod),
     {noreply, State#state{acceptor_pid = AcceptorPid}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -116,7 +116,7 @@ handle_info(finish_startup, #state{path = Path, user_mod = Mod} = State) ->
     file:delete(Path),
     case gen_tcp:listen(0, [{ifaddr, {local, Path}}, binary]) of
         {ok, Socket} ->
-            AcceptorPid = cli_unixdom_socket:start_link(self(), Socket, Mod),
+            AcceptorPid = cli_server:start_link(self(), Socket, Mod),
             {noreply, State#state{listen_socket = Socket,
                                   acceptor_pid = AcceptorPid}};
         {error, Reason} ->
@@ -132,7 +132,7 @@ handle_info({'EXIT', Pid, Reason}, #state{acceptor_pid = Pid,
                                           listen_socket = Socket} = State) ->
     io:format("Acceptor process exited ~p~n",[Reason]),
     %% Abnormal close of current acceptor process, create a replacement
-    AcceptorPid = cli_unixdom_socket:start_link(self(), Socket, Mod),
+    AcceptorPid = cli_server:start_link(self(), Socket, Mod),
     {noreply, State#state{acceptor_pid = AcceptorPid}};
 handle_info(_Info, State) ->
     {noreply, State}.

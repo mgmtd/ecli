@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Sean Hinde <sean@Seans-MacBook.local>
 %%% @copyright (C) 2019, Sean Hinde
-%%% @doc
+%%% @doc socket handling process acting as a cli server.
 %%%
 %%% @end
 %%% Created : 15 Aug 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_unixdom_socket).
+-module(cli_server).
 
 -behaviour(gen_server).
 
@@ -122,7 +122,7 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
             {stop, Err, State}
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false, user_mod = UserMod} = State) ->
-    io:format("GOT initial ~p~n",[Data]),
+    %% io:format("GOT initial ~p~n",[Data]),
     {ok, Prompt} = UserMod:prompt(State#state.user_state),
     {ok, Banner} = UserMod:banner(State#state.user_state),
     ok = gen_tcp:send(Socket, Banner),
@@ -208,13 +208,14 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
                 yes -> ok
             end,
             Cs1 = Add ++ Cs0,
-            {Term, Cs} =
+            Cs =
                 case Matches of
-                    [] -> {State#state.term, Cs1};
+                    [] -> Cs1;
                     _ ->
-                        {send_drv([{put_chars, unicode, unicode:characters_to_binary(Matches,utf8)}], State), [$\^L | Cs1]}
-                 end,
-            get_chars_loop(Cs, State#state{term = Term, edlin = Edlin, user_state = UserState});
+                        ok = send_raw(Matches, State),
+                        [$\^L | Cs1]
+                end,
+            get_chars_loop(Cs, State#state{edlin = Edlin, user_state = UserState});
         {done, FullLine, Cs, Ops} ->
             io:format("CMD: ~p~n",[FullLine]),
             Term = send_drv(Ops, State),
@@ -229,6 +230,10 @@ send_drv(Ops, #state{socket = Socket, term = Term0}) ->
     ok = gen_tcp:send(Socket, Bytes),
     inet:setopts(Socket, [{active, once}]),
     Term.
+
+send_raw(Bytes, #state{socket = Socket}) ->
+    io:format("Sending raw ~p\r\n",[Bytes]),
+    ok = gen_tcp:send(Socket, Bytes).
 
 %% Assumes that arg is a string
 %% Horizontal whitespace only.
