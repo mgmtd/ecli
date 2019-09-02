@@ -284,35 +284,11 @@ word_char(C) when C =:= $_ -> true;
 word_char([_|_]) -> true; %% Is grapheme
 word_char(_) -> false.
 
-erase_line({line,Pbs,{Bef,Aft},_}) ->
-    lists:reverse(erase(Pbs, Bef, Aft, [])).
-
-erase_inp({line,_,{Bef,Aft},_}) ->
-    lists:reverse(erase([], Bef, Aft, [])).
-
 erase(Pbs, Bef, Aft, Rs) ->
     [{delete_chars,-cp_len(Pbs)-cp_len(Bef),[]},{delete_chars,cp_len(Aft),[]}|Rs].
 
-redraw_line({line,Pbs,{Bef,Aft},_}) ->
-    lists:reverse(redraw(Pbs, Bef, Aft, [])).
-
 redraw(Pbs, Bef, Aft, Rs) ->
     [{move_rel,-cp_len(Aft)},{put_chars, unicode,lists:reverse(Bef, Aft)},{put_chars, unicode,Pbs}|Rs].
-
-length_before({line,Pbs,{Bef,_Aft},_}) ->
-    cp_len(Pbs) + cp_len(Bef).
-
-length_after({line,_,{_Bef,Aft},_}) ->
-    cp_len(Aft).
-
-prompt({line,Pbs,_,_}) ->
-    Pbs.
-
-current_line({line,_,{Bef, Aft},_}) ->
-    get_line(Bef, Aft ++ "\n").
-
-current_chars({line,_,{Bef,Aft},_}) ->
-    get_line(Bef, Aft).
 
 get_line(Bef, Aft) ->
     unicode:characters_to_list(lists:reverse(Bef, Aft)).
