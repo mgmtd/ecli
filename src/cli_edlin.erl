@@ -7,24 +7,25 @@
 %%%-------------------------------------------------------------------
 -module(cli_edlin).
 
--export([new/0, insert/2]).
+-export([start/1, insert/2]).
 
 -record(edlin,
         {
           line = {[], []},       % {Chars_before_cursor, Chars_after}
           state = none,
+          prompt,
           requests = []
         }).
 
 %%--------------------------------------------------------------------
 %% Create a new instance of edlin.
 %% --------------------------------------------------------------------
--spec new() -> #edlin{}.
-new() ->
-    #edlin{}.
+-spec start(Prompt::string()) -> #edlin{}.
+start(Prompt) when is_list(Prompt) ->
+    {#edlin{prompt = Prompt}, [{put_chars,unicode,Prompt}]}.
 
 insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
-                      requests = Rs0} = Ed) ->
+                      requests = Rs0, prompt = Prompt} = Ed) ->
     case key_map(C, State) of
         meta ->
             insert(Cs, Ed#edlin{state = meta});
@@ -39,7 +40,12 @@ insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
         meta_left_sq_bracket ->
             insert(Cs, Ed#edlin{state = meta_left_sq_bracket});
         new_line ->
-            {done, get_line(Bef, Aft), Cs, [crnl]};
+            {done, get_line(Bef, Aft), Cs,
+             lists:reverse(Rs0, [{move_rel,cp_len(Aft)}, crnl])};
+        redraw_line ->
+	    Rs1 = erase(Prompt, Bef, Aft, Rs0),
+	    Rs = redraw(Prompt, Bef, Aft, Rs1),
+	    insert(Cs, Ed#edlin{state = none, requests = Rs});
         tab_expand ->
             {expand, Bef, Cs, Ed#edlin{state = none}};
         {undefined,C} ->
@@ -285,7 +291,7 @@ erase_inp({line,_,{Bef,Aft},_}) ->
     lists:reverse(erase([], Bef, Aft, [])).
 
 erase(Pbs, Bef, Aft, Rs) ->
-    [{delete_chars,-cp_len(Pbs)-cp_len(Bef)},{delete_chars,cp_len(Aft)}|Rs].
+    [{delete_chars,-cp_len(Pbs)-cp_len(Bef),[]},{delete_chars,cp_len(Aft),[]}|Rs].
 
 redraw_line({line,Pbs,{Bef,Aft},_}) ->
     lists:reverse(redraw(Pbs, Bef, Aft, [])).

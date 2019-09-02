@@ -19,6 +19,9 @@
           mode = operational
         }).
 
+%%--------------------------------------------------------------------
+%% CLI behaviour mandatory callbacks
+%%--------------------------------------------------------------------
 init() ->
     {ok, #cli_juniper{}}.
 
@@ -29,13 +32,36 @@ Hit TAB, SPC or ? at any time to see available commands\r\n"}.
 prompt(#cli_juniper{mode = operational}) ->
     case inet:gethostname() of
         {ok, Hostname} ->
-            H = unicode:characters_to_binary(Hostname, utf8),
-            {ok, <<H/binary, "> ">>};
+            {ok, Hostname ++  "> "};
         _ ->
-            {ok, <<"> ">>}
+            {ok, "> "}
     end.
 
 
+expand([], #cli_juniper{mode = operational} = J) ->
+    {no, [], operational_menu(), J};
 expand(Chars, #cli_juniper{} = J) ->
     {no, [], [], J}.
 
+%%--------------------------------------------------------------------
+%% Internal functions
+%%--------------------------------------------------------------------
+operational_menu() ->
+    Menu = [{"show", "Show commands"},
+            {"configure", "Enter configuration mode"}],
+    format_menu(Menu).
+
+format_menu(Items) ->
+    MaxCmdLen = max_cmd_len(Items),
+    Menu = lists:map(fun({Cmd, Desc}) ->
+                             [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
+                     end, Items),
+    ["\r\n", Menu].
+
+pad(Str, Len) ->
+    Pad = lists:duplicate(Len - length(Str), $\s),
+    [Str, Pad].
+
+
+max_cmd_len(Items) ->
+    lists:max(lists:map(fun({Cmd, _}) -> length(Cmd) end, Items)).

@@ -63,12 +63,9 @@ start_link(ListenPid, ListenSocket, UserMod) ->
 %%--------------------------------------------------------------------
 init([ListenPid, ListenSocket, UserMod]) ->
     self() ! start_accepting,
-    {ok, UserState} = UserMod:init(),
     {ok, #state{listen_pid = ListenPid,
                 listen_socket = ListenSocket,
-                user_mod = UserMod,
-                user_state = UserState,
-                edlin = cli_edlin:new()
+                user_mod = UserMod
                }}.
 
 %%--------------------------------------------------------------------
@@ -121,15 +118,28 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
         {error, _Reason} = Err ->
             {stop, Err, State}
     end;
-handle_info({tcp, Socket, Data}, #state{got_meta = false, user_mod = UserMod} = State) ->
-    %% io:format("GOT initial ~p~n",[Data]),
-    {ok, Prompt} = UserMod:prompt(State#state.user_state),
-    {ok, Banner} = UserMod:banner(State#state.user_state),
+handle_info({tcp, Socket, Data}, #state{got_meta = false,
+                                        user_mod = UserMod} = State) ->
+    %% Initialise terminal with metadata from cli program
+    {ok, Term} = cli_term:new(Data),
+
+    %% Fetch any initial user defined state
+    {ok, UserState} = UserMod:init(),
+
+    %% Send user defined banner
+    {ok, Banner} = UserMod:banner(UserState),
     ok = gen_tcp:send(Socket, Banner),
-    {ok, {InitialData, Term}} = cli_term:new(Data, Prompt),
-    ok = gen_tcp:send(Socket, InitialData),
+
+    %% Set up edlin with the intial prompt
+    {ok, Prompt} = UserMod:prompt(UserState),
+    {Edlin, InitialOps} = cli_edlin:start(Prompt),
+    Term1 = send_drv(InitialOps, Socket, Term),
+
+    %% Start Fetching user input from the cli program
     inet:setopts(Socket, [{active, once}]),
-    {noreply, State#state{got_meta = true, term = Term}};
+
+    {noreply, State#state{got_meta = true, term = Term1,
+                          edlin = Edlin, user_state = UserState}};
 handle_info({tcp, _Socket, Data}, #state{buf = Buf, user_mod = UserMod} = State) ->
     io:format("GOT ~p~n",[Data]),
 
@@ -193,7 +203,7 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
     case cli_edlin:insert(CharList, State#state.edlin) of
         {more_chars, Edlin, Ops} ->
             io:format("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
-            Term = send_drv(Ops, State),
+            Term = send_drv(Ops, State#state.socket, State#state.term),
             {ok, Term, Edlin};
         {expand, Before, Cs0, Edlin} ->
             {Found, Add, Matches, UserState} = UserMod:expand(Before, State#state.user_state),
@@ -201,7 +211,7 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
                 no ->
                     case whitespace_only(Before) of
                         false ->
-                            send_drv([beep], State);
+                            send_drv([beep], State#state.socket, State#state.term);
                         true ->
                             ok
                     end;
@@ -218,15 +228,20 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
             get_chars_loop(Cs, State#state{edlin = Edlin, user_state = UserState});
         {done, FullLine, Cs, Ops} ->
             io:format("CMD: ~p~n",[FullLine]),
-            Term = send_drv(Ops, State),
-            get_chars_loop(Cs, State#state{term = Term,
-                                           edlin = cli_edlin:new()})
+            Term = send_drv(Ops, State#state.socket, State#state.term),
+            {ok, Prompt} = UserMod:prompt(State#state.user_state),
+            {Edlin, InitialOps} = cli_edlin:start(Prompt),
+            Term1 = send_drv(InitialOps, State#state.socket, Term),
+            get_chars_loop(Cs, State#state{term = Term1,
+                                           edlin = Edlin})
     end.
 
 
-send_drv(Ops, #state{socket = Socket, term = Term0}) ->
+send_drv(Ops, Socket, Term0) ->
+    io:format("Sending Ops~p\r\n",[Ops]),
+    io:format("Term before ~s\r\n",[cli_term:print(Term0)]),
     {Bytes, Term} = cli_term:send_ops(Ops, Term0),
-    io:format("Sending ~p\r\n",[Bytes]),
+    io:format("Term after ~s\r\n",[cli_term:print(Term)]),
     ok = gen_tcp:send(Socket, Bytes),
     inet:setopts(Socket, [{active, once}]),
     Term.

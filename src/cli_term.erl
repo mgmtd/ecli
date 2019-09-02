@@ -9,7 +9,7 @@
 -module(cli_term).
 
 
--export([new/2, set_prompt/2, send_ops/2]).
+-export([new/1, print/1, send_ops/2]).
 
 -record(term,
         {
@@ -19,7 +19,6 @@
           isatty :: boolean(),
           llen :: integer(),
           lpos :: integer(),
-          prompt :: binary(),
 
           %% tgetent props from here
           up :: binary(),             % Move cursor up 1
@@ -42,29 +41,28 @@
           xn :: boolean()              % Newline ignored after 80 cols
         }).
 
+print(#term{llen = Llen, lpos = Lpos}) ->
+    lists:flatten(["Lpos = ", integer_to_list(Lpos), " Llen = ", integer_to_list(Llen)]).
 
 
--spec new(binary(), binary()) -> {ok, {iolist(), #term{}}} | {error, term()}.
-new(MetaLine, Prompt) when is_binary(Prompt) ->
+-spec new(binary()) -> {ok, {iolist(), #term{}}} | {error, term()}.
+new(MetaLine) ->
     case binary:split(MetaLine, <<",">>, [global]) of
         [<<"cli:1">>, <<Isatty>>, Rows, Cols, Term | Termcaps] ->
-            PromptSz = size(Prompt),
             CliTerm = #term{
                          rows = parse_int(Rows),
                          cols = parse_int(Cols),
                          isatty = parse_bool(Isatty),
-                         llen = PromptSz,           % current line length
-                         lpos = PromptSz,           % current cursor position
-                         prompt = Prompt,
+                         llen = 0,           % current line length
+                         lpos = 0,           % current cursor position
                          term = Term
                         },
             T = parse_termcaps(Termcaps, CliTerm),
-            {ok, {Prompt, T}};
+            {ok, T};
         _ ->
             {error, {invalid, MetaLine}}
     end.
 
-set_prompt(Prompt, #term{} = T) -> T#term{prompt = Prompt}.
 
 %% -------------------------------------------------------------------
 %% Parse the termcap definitions provided in the data the cli program
@@ -80,7 +78,6 @@ parse_termcaps(Termcaps, CliTerm) ->
 
 parse_termcap(TC, T) when is_binary(TC) ->
     [Entry, Val] = binary:split(TC, <<":">>),
-    io:format("Parsing ~p\r\n", [[Entry, Val]]),
     parse_termcap({binary_to_list(Entry), Val}, T);
 parse_termcap({_, <<>>}, T) -> T;
 parse_termcap({"up", Cmd}, T) -> T#term{up = Cmd};
@@ -140,8 +137,7 @@ send_op({insert_chars, unicode, Chars, Aft}, T) ->
 send_op({delete_chars, N, Aft}, T) ->
     del_chars(N, Aft, T);
 send_op(crnl, T) ->
-    Pos = size(T#term.prompt),
-    {["\r\n[ok]\r\n",T#term.prompt], T#term{lpos = Pos, llen = Pos}};
+    {["\r\n[ok]\r\n"], T#term{lpos = 0, llen = 0}};
 send_op(beep, T) ->
     {[16#07], T}.
 
@@ -158,7 +154,7 @@ put_chars(Chars, #term{lpos = Lpos, llen = Llen} = T) ->
 move_rel(N, #term{lpos = Lpos, llen = Llen} = T) ->
     %% Step forwards or backwards over the buffer.
     Npos = step_over_chars(N, Lpos, Llen),
-    io:format("move_rel ~p ~p\r\n",[N, Npos]),
+    io:format("move_rel by:~p NewPos:~p\r\n",[N, Npos]),
 
     %% Calculate move, updates pointers and move the cursor.
     move_cursor(Lpos, Npos, T).
@@ -166,7 +162,7 @@ move_rel(N, #term{lpos = Lpos, llen = Llen} = T) ->
 move_cursor(From_pos, To_pos, #term{cols = Cols} = Term) ->
     From_col = cp_pos_to_col(From_pos),
     To_col = cp_pos_to_col(To_pos),
-    io:format("move_cursor ~p ~p ~p\r\n",[From_col, To_col, Cols]),
+    io:format("move_cursor From = ~p To = ~p ~p\r\n",[From_col, To_col, Cols]),
 
     Dc = col(To_col, Cols) - col(From_col, Cols),
     Dl = line(To_col, Cols) - line(From_col, Cols),
