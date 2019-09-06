@@ -140,7 +140,7 @@ handle_info({tcp, Socket, Data}, #state{got_meta = false,
 
     {noreply, State#state{got_meta = true, term = Term1,
                           edlin = Edlin, user_state = UserState}};
-handle_info({tcp, _Socket, Data}, #state{buf = Buf, user_mod = UserMod} = State) ->
+handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
     io:format("GOT ~p~n",[Data]),
 
     %% We have one or more chars. Normal chars get appended to the
@@ -205,7 +205,8 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
             io:format("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
             Term = send_drv(Ops, State#state.socket, State#state.term),
             {ok, Term, Edlin};
-        {expand, Before, Cs0, Edlin} ->
+        {expand, Before0, Cs0, Edlin} ->
+            Before = lists:reverse(Before0),
             {Found, Add, Matches, UserState} = UserMod:expand(Before, State#state.user_state),
             case Found of
                 no ->
