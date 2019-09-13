@@ -26,8 +26,8 @@
           listen_socket,
           term,                                 % #cli_term{}
           edlin,                                % #cli_edlin{}
-          user_mod,         % User defined CLI callback implementation
-          user_state,          % State threaded through user callbacks
+          cli_mod,         % User defined CLI callback implementation
+          cli_state,          % State threaded through cli callbacks
           got_meta = false,
           buf = <<>>                     % Temp buf for UTF boundaries
          }).
@@ -43,8 +43,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(ListenPid, ListenSocket, UserMod) ->
-    gen_server:start_link(?MODULE, [ListenPid, ListenSocket, UserMod], []).
+start_link(ListenPid, ListenSocket, CliMod) ->
+    gen_server:start_link(?MODULE, [ListenPid, ListenSocket, CliMod], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -61,11 +61,11 @@ start_link(ListenPid, ListenSocket, UserMod) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([ListenPid, ListenSocket, UserMod]) ->
+init([ListenPid, ListenSocket, CliMod]) ->
     self() ! start_accepting,
     {ok, #state{listen_pid = ListenPid,
                 listen_socket = ListenSocket,
-                user_mod = UserMod
+                cli_mod = CliMod
                }}.
 
 %%--------------------------------------------------------------------
@@ -119,19 +119,19 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
             {stop, Err, State}
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false,
-                                        user_mod = UserMod} = State) ->
+                                        cli_mod = CliMod} = State) ->
     %% Initialise terminal with metadata from cli program
     {ok, Term} = cli_term:new(Data),
 
     %% Fetch any initial user defined state
-    {ok, UserState} = UserMod:init(),
+    {ok, CliState} = CliMod:init(),
 
     %% Send user defined banner
-    {ok, Banner} = UserMod:banner(UserState),
+    {ok, Banner} = CliMod:banner(CliState),
     ok = gen_tcp:send(Socket, Banner),
 
     %% Set up edlin with the intial prompt
-    {ok, Prompt} = UserMod:prompt(UserState),
+    {ok, Prompt} = CliMod:prompt(CliState),
     {Edlin, InitialOps} = cli_edlin:start(Prompt),
     Term1 = send_drv(InitialOps, Socket, Term),
 
@@ -139,7 +139,7 @@ handle_info({tcp, Socket, Data}, #state{got_meta = false,
     inet:setopts(Socket, [{active, once}]),
 
     {noreply, State#state{got_meta = true, term = Term1,
-                          edlin = Edlin, user_state = UserState}};
+                          edlin = Edlin, cli_state = CliState}};
 handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
     io:format("GOT ~p~n",[Data]),
 
@@ -199,7 +199,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
+get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
     case cli_edlin:insert(CharList, State#state.edlin) of
         {more_chars, Edlin, Ops} ->
             io:format("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
@@ -207,7 +207,7 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
             {ok, Term, Edlin};
         {expand, Before0, Cs0, Edlin} ->
             Before = lists:reverse(Before0),
-            {Found, Add, Matches, UserState} = UserMod:expand(Before, State#state.user_state),
+            {Found, Add, Matches, CliState} = CliMod:expand(Before, State#state.cli_state),
             case Found of
                 no ->
                     case whitespace_only(Before) of
@@ -226,15 +226,18 @@ get_chars_loop(CharList, #state{user_mod = UserMod} = State) ->
                         ok = send_raw(Matches, State),
                         [$\^L | Cs1]
                 end,
-            get_chars_loop(Cs, State#state{edlin = Edlin, user_state = UserState});
+            get_chars_loop(Cs, State#state{edlin = Edlin, cli_state = CliState});
         {done, FullLine, Cs, Ops} ->
             io:format("CMD: ~p~n",[FullLine]),
+            {ok, Output, CliState} = CliMod:execute(FullLine, State#state.cli_state),
+            ok = send_raw(Output, State),
             Term = send_drv(Ops, State#state.socket, State#state.term),
-            {ok, Prompt} = UserMod:prompt(State#state.user_state),
+            {ok, Prompt} = CliMod:prompt(State#state.cli_state),
             {Edlin, InitialOps} = cli_edlin:start(Prompt),
             Term1 = send_drv(InitialOps, State#state.socket, Term),
             get_chars_loop(Cs, State#state{term = Term1,
-                                           edlin = Edlin})
+                                           edlin = Edlin,
+                                           cli_state = CliState})
     end.
 
 

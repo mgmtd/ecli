@@ -11,7 +11,8 @@
 -export([init/0,
          banner/1,
          prompt/1,
-         expand/2
+         expand/2,
+         execute/2
         ]).
 
 -record(cli_juniper,
@@ -51,7 +52,21 @@ expand([], #cli_juniper{mode = operational} = J) ->
     {no, [], format_menu(operational_menu()), J};
 expand(Chars, #cli_juniper{mode = operational} = J) ->
     io:format("expand ~p~n",[Chars]),
-    match_menu_item(Chars, operational_menu(), J).
+    match_menu_item(Chars, operational_menu(), J);
+expand([], #cli_juniper{mode = configuration} = J) ->
+    {no, [], format_menu(configuration_menu()), J};
+expand(Chars, #cli_juniper{mode = configuration} = J) ->
+    io:format("expand ~p~n",[Chars]),
+    match_menu_item(Chars, configuration_menu(), J).
+
+execute("configure", #cli_juniper{mode = operational} = J) ->
+    {ok, "", J#cli_juniper{mode = configuration}};
+execute("exit", #cli_juniper{mode = configuration} = J) ->
+    {ok, "", J#cli_juniper{mode = operational}};
+execute(_, #cli_juniper{} = J) ->
+    {ok, "", J}.
+
+
 
 %%--------------------------------------------------------------------
 %% Menu definitions
@@ -92,6 +107,24 @@ operational_show_menu() ->
                }
      ].
 
+configuration_menu() ->
+    [#menu_item{node_type = container,
+                node = "show",
+                desc = "Show configuration",
+                children = fun(J) -> configuration_tree(J) end
+               },
+     #menu_item{node_type = container,
+                node = "set",
+                desc = "Set a configuration parameter",
+                action = fun(J) -> show_status(J) end
+               },
+     #menu_item{node_type = leaf,
+                node = "exit",
+                desc = "Exit configuration mode",
+                action = fun(J) -> show_interface_status(J) end
+               }
+     ].
+
 %%--------------------------------------------------------------------
 %% Action implementations
 %%--------------------------------------------------------------------
@@ -104,6 +137,8 @@ show_status(#cli_juniper{} = J) ->
 show_interface_status(#cli_juniper{} = J) ->
     {ok, "Interface statuses\r\n", J}.
 
+configuration_tree(_J) ->
+    [].
 
 %%--------------------------------------------------------------------
 %% Internal functions

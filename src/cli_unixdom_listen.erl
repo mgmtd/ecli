@@ -24,7 +24,7 @@
         {
           listen_socket,
           path,
-          user_mod,
+          cli_mod,
           acceptor_pid
         }).
 
@@ -45,8 +45,8 @@ start_link() ->
 start_link(Path) ->
     start_link(Path, cli_juniper).
 
-start_link(Path, UserModule) ->
-    gen_server:start_link(?MODULE, [Path, UserModule], []).
+start_link(Path, CLIModule) ->
+    gen_server:start_link(?MODULE, [Path, CLIModule], []).
 
 notify_connection_established(ListenPid) ->
     gen_server:cast(ListenPid, connected).
@@ -67,10 +67,10 @@ notify_connection_established(ListenPid) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Path, UserModule]) ->
+init([Path, CLIModule]) ->
     process_flag(trap_exit, true),
     erlang:send_after(2000, self(), finish_startup),
-    {ok, #state{path = Path, user_mod = UserModule}}.
+    {ok, #state{path = Path, cli_mod = CLIModule}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -100,7 +100,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(connected, #state{user_mod = Mod, listen_socket = Ls} = State) ->
+handle_cast(connected, #state{cli_mod = Mod, listen_socket = Ls} = State) ->
     AcceptorPid = cli_server:start_link(self(), Ls, Mod),
     {noreply, State#state{acceptor_pid = AcceptorPid}};
 handle_cast(_Msg, State) ->
@@ -116,7 +116,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(finish_startup, #state{path = Path, user_mod = Mod} = State) ->
+handle_info(finish_startup, #state{path = Path, cli_mod = Mod} = State) ->
     file:delete(Path),
     case gen_tcp:listen(0, [{ifaddr, {local, Path}}, binary]) of
         {ok, Socket} ->
@@ -132,7 +132,7 @@ handle_info({'EXIT', Pid, normal}, #state{acceptor_pid = Pid} = State) ->
     %% Normal close of current acceptor process, shouldn't  be able to happen
     {noreply, State};
 handle_info({'EXIT', Pid, Reason}, #state{acceptor_pid = Pid,
-                                          user_mod = Mod,
+                                          cli_mod = Mod,
                                           listen_socket = Socket} = State) ->
     io:format("Acceptor process exited ~p~n",[Reason]),
     %% Abnormal close of current acceptor process, create a replacement
