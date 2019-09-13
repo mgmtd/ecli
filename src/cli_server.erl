@@ -141,7 +141,7 @@ handle_info({tcp, Socket, Data}, #state{got_meta = false,
     {noreply, State#state{got_meta = true, term = Term1,
                           edlin = Edlin, cli_state = CliState}};
 handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
-    io:format("GOT ~p~n",[Data]),
+    %% io:format("GOT ~p~n",[Data]),
 
     %% We have one or more chars. Normal chars get appended to the
     %% current line, ctrl chars affect the current line in various
@@ -162,10 +162,8 @@ handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
                                {Chars, <<>>}
                        end,
 
-    {ok, Term, Edlin} = get_chars_loop(CharList, State),
-    {noreply, State#state{buf = Buf1,
-                          term = Term,
-                          edlin = Edlin}};
+    {ok, State1} = get_chars_loop(CharList, State),
+    {noreply, State1#state{buf = Buf1}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -202,9 +200,9 @@ code_change(_OldVsn, State, _Extra) ->
 get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
     case cli_edlin:insert(CharList, State#state.edlin) of
         {more_chars, Edlin, Ops} ->
-            io:format("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
+            %% io:format("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
             Term = send_drv(Ops, State#state.socket, State#state.term),
-            {ok, Term, Edlin};
+            {ok, State#state{edlin = Edlin, term = Term}};
         {expand, Before0, Cs0, Edlin} ->
             Before = lists:reverse(Before0),
             {Found, Add, Matches, CliState} = CliMod:expand(Before, State#state.cli_state),
@@ -232,7 +230,7 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
             {ok, Output, CliState} = CliMod:execute(FullLine, State#state.cli_state),
             ok = send_raw(Output, State),
             Term = send_drv(Ops, State#state.socket, State#state.term),
-            {ok, Prompt} = CliMod:prompt(State#state.cli_state),
+            {ok, Prompt} = CliMod:prompt(CliState),
             {Edlin, InitialOps} = cli_edlin:start(Prompt),
             Term1 = send_drv(InitialOps, State#state.socket, Term),
             get_chars_loop(Cs, State#state{term = Term1,
@@ -242,16 +240,16 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
 
 
 send_drv(Ops, Socket, Term0) ->
-    io:format("Sending Ops~p\r\n",[Ops]),
-    io:format("Term before ~s\r\n",[cli_term:print(Term0)]),
+    %% io:format("Sending Ops~p\r\n",[Ops]),
+    %% io:format("Term before ~s\r\n",[cli_term:print(Term0)]),
     {Bytes, Term} = cli_term:send_ops(Ops, Term0),
-    io:format("Term after ~s\r\n",[cli_term:print(Term)]),
+    %% io:format("Term after ~s\r\n",[cli_term:print(Term)]),
     ok = gen_tcp:send(Socket, Bytes),
     inet:setopts(Socket, [{active, once}]),
     Term.
 
 send_raw(Bytes, #state{socket = Socket}) ->
-    io:format("Sending raw ~p\r\n",[Bytes]),
+    %% io:format("Sending raw ~p\r\n",[Bytes]),
     ok = gen_tcp:send(Socket, Bytes).
 
 %% Assumes that arg is a string

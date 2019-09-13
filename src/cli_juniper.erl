@@ -39,31 +39,38 @@ banner(#cli_juniper{}) ->
     {ok, "\r\nWelcome to the Juniper style CLI\r\n
 Hit TAB, SPC or ? at any time to see available options\r\n\r\n"}.
 
-prompt(#cli_juniper{mode = operational}) ->
+prompt(#cli_juniper{mode = Mode}) ->
+    Suffix = case Mode of
+                 operational ->
+                     "> ";
+                 configuration ->
+                     "# "
+             end,
     case inet:gethostname() of
         {ok, Hostname} ->
-            {ok, Hostname ++  "> "};
+            {ok, Hostname ++  Suffix};
         _ ->
-            {ok, "> "}
+            {ok, Suffix}
     end.
 
 
 expand([], #cli_juniper{mode = operational} = J) ->
     {no, [], format_menu(operational_menu()), J};
 expand(Chars, #cli_juniper{mode = operational} = J) ->
-    io:format("expand ~p~n",[Chars]),
+    %% io:format("expand ~p~n",[Chars]),
     match_menu_item(Chars, operational_menu(), J);
 expand([], #cli_juniper{mode = configuration} = J) ->
     {no, [], format_menu(configuration_menu()), J};
 expand(Chars, #cli_juniper{mode = configuration} = J) ->
-    io:format("expand ~p~n",[Chars]),
+    io:format("expand config ~p~n",[Chars]),
     match_menu_item(Chars, configuration_menu(), J).
 
 execute("configure", #cli_juniper{mode = operational} = J) ->
     {ok, "", J#cli_juniper{mode = configuration}};
 execute("exit", #cli_juniper{mode = configuration} = J) ->
     {ok, "", J#cli_juniper{mode = operational}};
-execute(_, #cli_juniper{} = J) ->
+execute(Other, #cli_juniper{} = J) ->
+    io:format("Executed other ~p~n",[Other]),
     {ok, "", J}.
 
 
@@ -169,7 +176,7 @@ format_menu(Items) ->
 %%    we can and prompt the user with the possible matches
 
 match_menu_item(Str, Menu, J) ->
-    io:format("match_menu_item ~p~n",[Str]),
+    %% io:format("match_menu_item ~p~n",[Str]),
     case parse_cmd(Str, Menu) of
         no ->
             {no, [], [], J};
@@ -183,7 +190,7 @@ menu_item_children(_) -> [].
 
 
 parse_cmd(Str, MenuItems) ->
-    io:format("parse_cmd ~p~n",[Str]),
+    %% io:format("parse_cmd ~p~n",[Str]),
     parse_cmd(Str, MenuItems, [], start).
 
 parse_cmd([$\s|Cs], MenuItems, MatchedChars, start) ->
@@ -191,7 +198,7 @@ parse_cmd([$\s|Cs], MenuItems, MatchedChars, start) ->
 parse_cmd([$\t|Cs], MenuItems, MatchedChars, start) ->
     parse_cmd(Cs, MenuItems, MatchedChars, start);
 parse_cmd([], MenuItems, _MatchedChars, start) ->
-    io:format("parse_cmd start end ~p~n",[MenuItems]),
+    %% io:format("parse_cmd start end ~p~n",[MenuItems]),
     case MenuItems of
         [] ->
             no;
@@ -201,19 +208,19 @@ parse_cmd([], MenuItems, _MatchedChars, start) ->
             {yes, "", MenuItems}
     end;
 parse_cmd(Str, MenuItems, MatchedChars, start) ->
-    io:format("parse_cmd change state ~p~n",[cmd]),
+    %% io:format("parse_cmd change state ~p~n",[cmd]),
     parse_cmd(Str, MenuItems, MatchedChars, cmd);
 parse_cmd([$\s|Cs], [#menu_item{node = Node} = Item], MatchedChars, cmd) ->
     case MatchedChars of
         Node ->
             %% Matched a full level in the tree with a following space. Carry on to children
-            io:format("parse_cmd matched full level ~p~p~n",[Node,Item]),
+            %% io:format("parse_cmd matched full level ~p~p~n",[Node,Item]),
             parse_cmd(Cs, menu_item_children(Item), [], start);
         _ ->
             no
     end;
 parse_cmd([C|Cs], MenuItems, Matched, cmd) ->
-    io:format("parse_cmd normal chars ~p matched = ~p~n",[C, Matched]),
+    %% io:format("parse_cmd normal chars ~p matched = ~p~n",[C, Matched]),
     SoFar = Matched ++ [C],
     Matches = match_cmds(SoFar, MenuItems),
     case Matches of
@@ -227,7 +234,7 @@ parse_cmd([], [], _, _) ->
 parse_cmd([], MenuItems, MatchedStr, cmd) ->
     %% Reached the end of the input without getting to the end of a
     %% cmd with following space
-    io:format("parse_cmd end ~p matched = ~p~n",[MenuItems, MatchedStr]),
+    %% io:format("parse_cmd end ~p matched = ~p~n",[MenuItems, MatchedStr]),
     case MenuItems of
         [#menu_item{node = Node} = Item] when Node == MatchedStr ->
             {yes, " ", menu_item_children(Item)};
@@ -257,7 +264,7 @@ expand_menus(Str, Menus) ->
     Suffixes = lists:map(fun(#menu_item{node = Node}) ->
                                         lists:nthtail(StrLen, Node)
                                 end, Menus),
-    io:format("expand_menus ML = ~p~n",[Suffixes]),
+    %% io:format("expand_menus ML = ~p~n",[Suffixes]),
     longest_common_prefix(Suffixes).
 
 longest_common_prefix(Strings) ->

@@ -154,7 +154,7 @@ put_chars(Chars, #term{lpos = Lpos, llen = Llen} = T) ->
 move_rel(N, #term{lpos = Lpos, llen = Llen} = T) ->
     %% Step forwards or backwards over the buffer.
     Npos = step_over_chars(N, Lpos, Llen),
-    io:format("move_rel by:~p NewPos:~p\r\n",[N, Npos]),
+    %% io:format("move_rel by:~p NewPos:~p\r\n",[N, Npos]),
 
     %% Calculate move, updates pointers and move the cursor.
     move_cursor(Lpos, Npos, T).
@@ -162,11 +162,11 @@ move_rel(N, #term{lpos = Lpos, llen = Llen} = T) ->
 move_cursor(From_pos, To_pos, #term{cols = Cols} = Term) ->
     From_col = cp_pos_to_col(From_pos),
     To_col = cp_pos_to_col(To_pos),
-    io:format("move_cursor From = ~p To = ~p ~p\r\n",[From_col, To_col, Cols]),
+    %% io:format("move_cursor From = ~p To = ~p ~p\r\n",[From_col, To_col, Cols]),
 
     Dc = col(To_col, Cols) - col(From_col, Cols),
     Dl = line(To_col, Cols) - line(From_col, Cols),
-    io:format("move_cursor Dc = ~p Dl = ~p\r\n",[Dc, Dl]),
+    %% io:format("move_cursor Dc = ~p Dl = ~p\r\n",[Dc, Dl]),
 
     Vert = if Dl > 0 ->
                    move_down(Dl, Term);
@@ -199,8 +199,8 @@ ins_chars(Chars, Aft, #term{lpos = Lpos, llen = Llen} = T) ->
 %% deleted block.
 del_chars(N, Aft, #term{lpos = Lpos, llen = Llen} = T) ->
     Pos = step_over_chars(N, Lpos, Llen),
-    io:format("stepped over N = ~p, Lpos = ~p, Llen = ~p, Pos = ~p~n",
-              [N, Lpos, Llen, Pos]),
+    %% io:format("stepped over N = ~p, Lpos = ~p, Llen = ~p, Pos = ~p~n",
+   %%           [N, Lpos, Llen, Pos]),
     if Pos > Lpos ->
             %% Deleting after cursor (forward delete)
             L = Pos - Lpos,
