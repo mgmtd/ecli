@@ -55,12 +55,12 @@ prompt(#cli_juniper{mode = Mode}) ->
 
 
 expand([], #cli_juniper{mode = operational} = J) ->
-    {no, [], format_menu(operational_menu()), J};
+    {no, [], cli:format_menu(operational_menu(), getters()), J};
 expand(Chars, #cli_juniper{mode = operational} = J) ->
     %% io:format("expand ~p~n",[Chars]),
     match_menu_item(Chars, operational_menu(), J);
 expand([], #cli_juniper{mode = configuration} = J) ->
-    {no, [], format_menu(configuration_menu()), J};
+    {no, [], cli:format_menu(configuration_menu(), getters()), J};
 expand(Chars, #cli_juniper{mode = configuration} = J) ->
     io:format("expand config ~p~n",[Chars]),
     match_menu_item(Chars, configuration_menu(), J).
@@ -118,7 +118,7 @@ configuration_menu() ->
     [#menu_item{node_type = container,
                 node = "show",
                 desc = "Show configuration",
-                children = fun(J) -> configuration_tree(J) end
+                children = fun() -> configuration_tree() end
                },
      #menu_item{node_type = container,
                 node = "set",
@@ -144,19 +144,12 @@ show_status(#cli_juniper{} = J) ->
 show_interface_status(#cli_juniper{} = J) ->
     {ok, "Interface statuses\r\n", J}.
 
-configuration_tree(_J) ->
-    [].
+configuration_tree() ->
+    {switch_getters, cfg:getters(), example:cfg_schema()}.
 
 %%--------------------------------------------------------------------
 %% Internal functions
 %%--------------------------------------------------------------------
-format_menu([]) -> "";
-format_menu(Items) ->
-    MaxCmdLen = max_cmd_len(Items),
-    Menu = lists:map(fun(#menu_item{node = Cmd, desc = Desc}) ->
-                             [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
-                     end, Items),
-    ["\r\n", Menu].
 
 %% Given a string from the user and a tree of menu items match the
 %% command against the tree. Several outcomes:
@@ -177,133 +170,23 @@ format_menu(Items) ->
 
 match_menu_item(Str, Menu, J) ->
     %% io:format("match_menu_item ~p~n",[Str]),
-    case parse_cmd(Str, Menu) of
+    case cli:expand(Str, Menu, getters()) of
         no ->
             {no, [], [], J};
-        {yes, Extra, MenuItems} ->
-            {yes, Extra, format_menu(MenuItems), J}
+        {yes, Extra, MenuItems, Getters} ->
+            {yes, Extra, cli:format_menu(MenuItems, Getters), J}
     end.
 
-menu_item_children(#menu_item{children = Fn}) when is_function(Fn) -> Fn();
-menu_item_children(L) when is_list(L) -> L;
-menu_item_children(_) -> [].
+%% Set up the structure needed for the generic expander to know enough about our #menu_item{}s
+getters() ->
+    cli:getters(fun name/1, fun desc/1, fun children/1).
 
+name(#menu_item{node = Name}) -> Name.
 
-parse_cmd(Str, MenuItems) ->
-    %% io:format("parse_cmd ~p~n",[Str]),
-    parse_cmd(Str, MenuItems, [], start).
+desc(#menu_item{desc = Desc}) -> Desc.
 
-parse_cmd([$\s|Cs], MenuItems, MatchedChars, start) ->
-    parse_cmd(Cs, MenuItems, MatchedChars, start);
-parse_cmd([$\t|Cs], MenuItems, MatchedChars, start) ->
-    parse_cmd(Cs, MenuItems, MatchedChars, start);
-parse_cmd([], MenuItems, _MatchedChars, start) ->
-    %% io:format("parse_cmd start end ~p~n",[MenuItems]),
-    case MenuItems of
-        [] ->
-            no;
-        [#menu_item{}] ->
-            {yes, "", MenuItems};
-        _ ->
-            {yes, "", MenuItems}
-    end;
-parse_cmd(Str, MenuItems, MatchedChars, start) ->
-    %% io:format("parse_cmd change state ~p~n",[cmd]),
-    parse_cmd(Str, MenuItems, MatchedChars, cmd);
-parse_cmd([$\s|Cs], [#menu_item{node = Node} = Item], MatchedChars, cmd) ->
-    case MatchedChars of
-        Node ->
-            %% Matched a full level in the tree with a following space. Carry on to children
-            %% io:format("parse_cmd matched full level ~p~p~n",[Node,Item]),
-            parse_cmd(Cs, menu_item_children(Item), [], start);
-        _ ->
-            no
-    end;
-parse_cmd([C|Cs], MenuItems, Matched, cmd) ->
-    %% io:format("parse_cmd normal chars ~p matched = ~p~n",[C, Matched]),
-    SoFar = Matched ++ [C],
-    Matches = match_cmds(SoFar, MenuItems),
-    case Matches of
-        [] ->
-            no;
-        Items ->
-            parse_cmd(Cs, Items, SoFar, cmd)
-    end;
-parse_cmd([], [], _, _) ->
-    no;
-parse_cmd([], MenuItems, MatchedStr, cmd) ->
-    %% Reached the end of the input without getting to the end of a
-    %% cmd with following space
-    %% io:format("parse_cmd end ~p matched = ~p~n",[MenuItems, MatchedStr]),
-    case MenuItems of
-        [#menu_item{node = Node} = Item] when Node == MatchedStr ->
-            {yes, " ", menu_item_children(Item)};
-        [#menu_item{node = Node}] ->
-            {yes, chars_to_expand(MatchedStr, Node), []};
-        MenuItems ->
-            %% Still a number of matching menu items. auto fill up to the point they diverge
-            Chars = expand_menus(MatchedStr, MenuItems),
-            {yes, Chars, MenuItems}
-    end.
+children(#menu_item{children = Cs}) -> Cs.
 
-
-match_cmds(_Str, []) ->
-    [];
-match_cmds(Str, Menu) ->
-    lists:filter(fun(#menu_item{node = Item}) ->
-                         lists:prefix(Str, Item)
-                 end, Menu).
-
-chars_to_expand(Str, Match) ->
-    lists:sublist(Match, length(Str) + 1, length(Match) - 1) ++ " ".
-
-%% Find characters to add to fill up to where the node names diverge
-%% e.g. names configure and contain given an input of "c" should return "on"
-expand_menus(Str, Menus) ->
-    StrLen = length(Str),
-    Suffixes = lists:map(fun(#menu_item{node = Node}) ->
-                                        lists:nthtail(StrLen, Node)
-                                end, Menus),
-    %% io:format("expand_menus ML = ~p~n",[Suffixes]),
-    longest_common_prefix(Suffixes).
-
-longest_common_prefix(Strings) ->
-    longest_common_prefix(Strings, []).
-
-longest_common_prefix(Strings, Result) ->
-    {Prefixes, Tails} = lists:unzip(lists:map(
-                                      fun([C|Cs]) -> {C, Cs};
-                                         ([]) -> {empty, []}
-                                      end, Strings)),
-    case lists:member(empty, Prefixes) of
-        true ->
-            lists:reverse(Result);
-        false ->
-            case identical(Prefixes) of
-                true ->
-                    longest_common_prefix(Tails, [hd(Prefixes) | Result]);
-                false ->
-                    lists:reverse(Result)
-            end
-    end.
-
-identical([A,A|As]) ->
-    identical([A|As]);
-identical([_,_|_]) ->
-    false;
-identical([_]) ->
-    true;
-identical([]) ->
-    true.
-
-
-pad(Str, Len) ->
-    Pad = lists:duplicate(Len - length(Str), $\s),
-    [Str, Pad].
-
-
-max_cmd_len(Items) ->
-    lists:max(lists:map(fun(#menu_item{node = Cmd}) -> length(Cmd) end, Items)).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
