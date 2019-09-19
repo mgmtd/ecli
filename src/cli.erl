@@ -14,8 +14,9 @@
 -export([open/1, close/1]).
 
 -export([
-         getters/3,
+         getters/5,
          expand/3,
+         lookup/3,
          format_menu/2
         ]).
 
@@ -54,11 +55,13 @@ close(Pid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-getters(NameFun, DescFun, ChildrenFun) ->
+getters(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun) ->
     #getters{
        name_fun = NameFun,
        desc_fun = DescFun,
-       children_fun = ChildrenFun
+       children_fun = ChildrenFun,
+       action_fun = ActionFun,
+       node_type_fun = NodeTypeFun
       }.
 
 %%--------------------------------------------------------------------
@@ -68,6 +71,17 @@ getters(NameFun, DescFun, ChildrenFun) ->
 %%--------------------------------------------------------------------
 expand(Str, Tree, Getters) ->
     cli_expand:expand(Str, Tree, Getters).
+
+%%--------------------------------------------------------------------
+%% @doc Given a full command string and a tree of items return false
+%%      if the command doesn't point to a leaf in the tree,
+%%      or {ok, Action} where action is a fun that will execute the
+%%      command.
+%% @end
+%%--------------------------------------------------------------------
+-spec lookup(Path::string(), Tree::term(), proplists:proplist()) -> {ok, fun()} | false.
+lookup(Str, Tree, Getters) ->
+    cli_lookup:lookup(Str, Tree, Getters).
 
 
 %%--------------------------------------------------------------------

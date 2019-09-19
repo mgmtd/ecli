@@ -17,16 +17,17 @@
 
 -record(cli_juniper,
         {
-          mode = operational
+         mode = operational,
+         user_txn             % Transaction store for command sequences that need one
         }).
 
 -record(menu_item,
         {
-          node_type = leaf,
-          node,
-          desc,
-          children,
-          action
+         node_type = leaf,
+         node,
+         desc,
+         children,
+         action
         }).
 
 %%--------------------------------------------------------------------
@@ -69,9 +70,12 @@ execute("configure", #cli_juniper{mode = operational} = J) ->
     {ok, "", J#cli_juniper{mode = configuration}};
 execute("exit", #cli_juniper{mode = configuration} = J) ->
     {ok, "", J#cli_juniper{mode = operational}};
-execute(Other, #cli_juniper{} = J) ->
-    io:format("Executed other ~p~n",[Other]),
-    {ok, "", J}.
+execute(CmdStr, #cli_juniper{mode = operational} = J) ->
+    io:format("Executing operational Command ~p~n",[CmdStr]),
+    execute_menu_item(CmdStr, operational_menu(), J);
+execute(CmdStr, #cli_juniper{mode = configuration} = J) ->
+    io:format("Executing configuration Command ~p~n",[CmdStr]),
+    execute_menu_item(CmdStr, configuration_menu(), J).
 
 
 
@@ -82,6 +86,7 @@ operational_menu() ->
     [#menu_item{node_type = container,
                 node = "show",
                 desc = "Show commands",
+                action = fun(Txn, Item, _Value) -> show_operational(Txn, Item) end,
                 children = fun() -> operational_show_menu() end
                },
      #menu_item{node_type = leaf,
@@ -123,7 +128,7 @@ configuration_menu() ->
      #menu_item{node_type = container,
                 node = "set",
                 desc = "Set a configuration parameter",
-                action = fun(J) -> show_status(J) end
+                action = fun(Txn, Path, Value) -> cfg:set(Txn, Path, Value) end
                },
      #menu_item{node_type = leaf,
                 node = "exit",
@@ -136,7 +141,8 @@ configuration_menu() ->
 %% Action implementations
 %%--------------------------------------------------------------------
 enter_config_mode(#cli_juniper{} = J) ->
-    {ok, "", J#cli_juniper{mode = configuration}}.
+    Txn = cfg:transaction(configuration),
+    {ok, "", J#cli_juniper{mode = configuration, user_txn = Txn}}.
 
 show_status(#cli_juniper{} = J) ->
     {ok, "Status description\r\n", J}.
@@ -144,8 +150,14 @@ show_status(#cli_juniper{} = J) ->
 show_interface_status(#cli_juniper{} = J) ->
     {ok, "Interface statuses\r\n", J}.
 
+show_operational(_Txn, Item) ->
+    io:format("Executing show operational ~p~n",[Item]),
+    {ok, "Operational statuses\r\n"}.
+
 configuration_tree() ->
     {switch_getters, cfg:getters(), example:cfg_schema()}.
+
+
 
 %%--------------------------------------------------------------------
 %% Internal functions
@@ -170,6 +182,7 @@ configuration_tree() ->
 
 match_menu_item(Str, Menu, J) ->
     %% io:format("match_menu_item ~p~n",[Str]),
+    %% Use the library function provided in cli to take care of the expansion
     case cli:expand(Str, Menu, getters()) of
         no ->
             {no, [], [], J};
@@ -177,15 +190,36 @@ match_menu_item(Str, Menu, J) ->
             {yes, Extra, cli:format_menu(MenuItems, Getters), J}
     end.
 
+execute_menu_item(CmdStr, Menu, J) ->
+    case cli:lookup(CmdStr, Menu, getters()) of
+        {error, Reason} ->
+            {ok, Reason, J};
+        {ok, Cmd, Leaf, Value} ->
+            Action = action(Cmd),
+            case catch Action(J#cli_juniper.user_txn, Leaf, Value) of
+                {'EXIT', Reason} ->
+                    io:format("Executing configuration exit ~p~n",[Reason]),
+                    {ok, "Error executing command", J};
+                {ok, Result} ->
+                    {ok, Result, J};
+                {ok, Result, UserTxn} ->
+                    {ok, Result, J#cli_juniper{user_txn = UserTxn}}
+            end
+    end.
+
 %% Set up the structure needed for the generic expander to know enough about our #menu_item{}s
 getters() ->
-    cli:getters(fun name/1, fun desc/1, fun children/1).
+    cli:getters(fun name/1, fun desc/1, fun children/1, fun action/1, fun node_type/1).
 
 name(#menu_item{node = Name}) -> Name.
 
 desc(#menu_item{desc = Desc}) -> Desc.
 
 children(#menu_item{children = Cs}) -> Cs.
+
+node_type(#menu_item{node_type = Type}) -> Type.
+
+action(#menu_item{action = Action}) -> Action.
 
 
 -ifdef(TEST).

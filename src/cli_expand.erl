@@ -88,17 +88,12 @@ chars_to_expand(Str, Match) ->
 menu_item_children(Item, Gs) ->
     Cs = cli_util:children(Gs, Item),
     io:format("Children = ~p~n",[Cs]),
-    case eval_childspec(Cs) of
+    case cli_util:eval_childspec(Cs) of
         {switch_getters, NewGs, Children} ->
             {NewGs, Children};
         Children ->
             {Gs, Children}
     end.
-
-eval_childspec(F) when is_function(F) -> F();
-eval_childspec(L) when is_list(L) -> L;
-eval_childspec(_) -> [].
-
 
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"

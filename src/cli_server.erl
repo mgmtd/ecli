@@ -228,6 +228,7 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
         {done, FullLine, Cs, Ops} ->
             io:format("CMD: ~p~n",[FullLine]),
             {ok, Output, CliState} = CliMod:execute(FullLine, State#state.cli_state),
+            ok = send_raw("\r\n", State),
             ok = send_raw(Output, State),
             Term = send_drv(Ops, State#state.socket, State#state.term),
             {ok, Prompt} = CliMod:prompt(CliState),

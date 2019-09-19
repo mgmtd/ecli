@@ -11,5 +11,7 @@
         {
          name_fun,
          desc_fun,
-         children_fun
+         children_fun,
+         action_fun,
+         node_type_fun
         }).

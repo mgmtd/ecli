@@ -69,7 +69,7 @@ notify_connection_established(ListenPid) ->
 %%--------------------------------------------------------------------
 init([Path, CLIModule]) ->
     process_flag(trap_exit, true),
-    erlang:send_after(2000, self(), finish_startup),
+    erlang:send_after(0, self(), finish_startup),
     {ok, #state{path = Path, cli_mod = CLIModule}}.
 
 %%--------------------------------------------------------------------
