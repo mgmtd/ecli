@@ -36,8 +36,9 @@ distribution, with more from Stevens and various blog posts.
 Why?
 ----
 
-I don't want to have to build another closed source version of this
-again.
+I don't want to have to build yet another closed source version of
+this again. Now I don't work for a telecom supplier I have freedom to
+hack on telecom stuff of my own.
 
 Build
 -----
@@ -86,7 +87,7 @@ erlang shell and other typical emacs-ish shells:
     CTRL-d - forward delete character
     CTRL-l - redraw line
     CTRL-t - transpose characters
-    CTRL-k - Kill to end of line
+    CTRL-k - kill to end of line
     CTRL-y - yank killed text
     CTRL-w - backwards delete word (buggy right now)
 
