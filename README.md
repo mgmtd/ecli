@@ -1,9 +1,9 @@
 cli
 ===
 
-An OTP application providing an online command line interface.
+An Erlang/OTP application providing an online command line interface.
 
-It provides a bunch of components designed to make it easy to build telecom
+Provides a collection of parts designed to make it easy to build telecom
 style command line access to a system. Features:
 
 * Small C program 'cli' to access the command line via a unix domain socket
@@ -27,10 +27,67 @@ This code is under active development. None of the APIs are in any way
 stable and are likely to change. But it does something, and could be
 fun to play with.
 
+Origin
+------
+
+Much of the tricky stuff comes from edlin.erl of the Erlang/OTP
+distribution, with more from Stevens and various blog posts.
+
+Why?
+----
+
+I don't want to have to build another closed source version of this
+again.
+
 Build
 -----
 
     $ rebar3 compile
+
+Run in test mode
+----------------
+
+    $ rebar3 shell
+
+    Eshell V10.4  (abort with ^G)
+    1> application:start(cli).
+    ok
+    2> cli:open("/var/tmp/example.socket", cli_juniper).
+    {ok,<0.131.0>}
+    3>
+
+    Then attach the cli and poke around:
+
+    ./_build/default/lib/cli/priv/cli
+
+    Welcome to the Juniper style CLI
+    Hit TAB, SPC or ? at any time to see available options
+
+    Seans-MacBook> configure
+
+    [ok]
+    Seans-MacBook# <TAB>
+    show Show configuration
+    set  Set a configuration parameter
+    exit Exit configuration mode
+    Seans-MacBook# exit
+
+    [ok]
+    Seans-MacBook>
+
+Many of the usual command editing shortcuts work as they do in the
+erlang shell and other typical emacs-ish shells:
+
+     CTRL-a - Start of line
+     CTRL-e - end of line
+     CTRL-k - Kill to end of line
+     CTRL-y - yank killed text
+
+     Cursor left right should work
+     CTRL-left and right - back / forward word
+
+     TAB - completion
+
 
 Test
 ----

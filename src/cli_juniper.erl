@@ -126,7 +126,7 @@ configuration_menu() ->
      #menu_item{node_type = container,
                 node = "set",
                 desc = "Set a configuration parameter",
-                action = fun(Txn, Path, Value) -> cfg:set(Txn, Path, Value) end
+                action = fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end
                },
      #menu_item{node_type = leaf,
                 node = "exit",
@@ -139,11 +139,10 @@ configuration_menu() ->
 %% Action implementations
 %%--------------------------------------------------------------------
 enter_config_mode(#cli_juniper{} = J) ->
-    Txn = cfg:transaction(),
+    Txn = transaction_id,
     {ok, "", J#cli_juniper{mode = configuration, user_txn = Txn}}.
 
-exit_config_mode(#cli_juniper{user_txn = Txn} = J) ->
-    cfg:exit_transaction(Txn),
+exit_config_mode(#cli_juniper{user_txn = _Txn} = J) ->
     {ok, "", J#cli_juniper{mode = operational, user_txn = undefined}}.
 
 show_status(#cli_juniper{} = J, _Item) ->
@@ -157,9 +156,14 @@ show_operational(#cli_juniper{user_txn = _Txn}, Item) ->
     {ok, "Operational statuses\r\n"}.
 
 configuration_tree() ->
-    {switch_getters, cfg:getters(), example:cfg_schema()}.
+    {switch_getters, cfg_getters(), []}.
 
+%% Could refer to getters in a configuration tree here.
+cfg_getters() ->
+    cli:getters(fun name/1, fun desc/1, fun children/1, fun action/1, fun node_type/1).
 
+cfg_set(_Txn, _Path, _Value) ->
+    {ok, "Set OK\r\n"}.
 
 %%--------------------------------------------------------------------
 %% Internal functions

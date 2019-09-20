@@ -8,7 +8,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_child/1, stop_child/1]).
+-export([start_link/0, start_child/2, stop_child/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -22,8 +22,8 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child(Path) ->
-    supervisor:start_child(?MODULE, [Path]).
+start_child(Path, CLIModule) ->
+    supervisor:start_child(?MODULE, [Path, CLIModule]).
 
 stop_child(Pid) when is_pid(Pid) ->
     supervisor:delete_child(?MODULE, Pid).

@@ -11,7 +11,7 @@
 -include("cli.hrl").
 
 %% API
--export([open/1, close/1]).
+-export([open/2, close/1]).
 
 -export([
          getters/5,
@@ -30,9 +30,9 @@
 %%      One reasonably sane location could be: /var/tmp/
 %% @end
 %%--------------------------------------------------------------------
--spec open(Path::string()) -> {ok, pid()} | {error, term()}.
-open(Path) ->
-    cli_sup:start_child(Path).
+-spec open(Path::string(), CLIModule::atom()) -> {ok, pid()} | {error, term()}.
+open(Path, CLIModule) ->
+    cli_sup:start_child(Path, CLIModule).
 
 %%--------------------------------------------------------------------
 %% @doc Close the server end of a previously opened CLI socket. Pid must
