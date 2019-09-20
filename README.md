@@ -102,3 +102,20 @@ Test
 ----
 
     $ rebar3 eunit
+
+Todo
+----
+
+Many things:
+
+- [ ] Hook up sigwinch events in cli and pass up to server
+- [ ] Grab the user details from the unix domain socket and pass to an
+      authentication callback of some kind.
+- [ ] Completion of value types - strings, leaf lists, enums
+- [ ] Use the values extracted from terminfo properly
+- [ ] CTRL-c handling in the cli program
+- [ ] CTRL-d to close session (or exit configure mode) if at start of line
+- [ ] Lots more of the control keks in cli_edlin.erl need to be hooked up
+- [ ] cursor back from a second line goes to the wrong place
+- [ ] proper logging of user commands
+- [ ] skipping over control sequences in output e.g. coloring
