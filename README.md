@@ -56,7 +56,7 @@ Run in test mode
     {ok,<0.131.0>}
     3>
 
-    Then attach the cli and poke around:
+Then attach the cli and poke around:
 
     ./_build/default/lib/cli/priv/cli
 
@@ -95,7 +95,7 @@ erlang shell and other typical emacs-ish shells:
 
     TAB - completion
 
-    There are more planned, also to fix multiline bugs
+There are more planned, also to fix multiline bugs
 
 Test
 ----
