@@ -78,16 +78,24 @@ Run in test mode
 Many of the usual command editing shortcuts work as they do in the
 erlang shell and other typical emacs-ish shells:
 
-     CTRL-a - Start of line
-     CTRL-e - end of line
-     CTRL-k - Kill to end of line
-     CTRL-y - yank killed text
+    CTRL-a - Start of line
+    CTRL-e - end of line
+    CTRL-b - backwards character
+    CTRL-f - forward character
+    CTRL-h - backward delete character
+    CTRL-d - forward delete character
+    CTRL-l - redraw line
+    CTRL-t - transpose characters
+    CTRL-k - Kill to end of line
+    CTRL-y - yank killed text
+    CTRL-w - backwards delete word (buggy right now)
 
-     Cursor left right should work
-     CTRL-left and right - back / forward word
+    Cursor left right should work
+    CTRL-left and right - back / forward word
 
-     TAB - completion
+    TAB - completion
 
+    There are more planned, also to fix multiline bugs
 
 Test
 ----
