@@ -111,6 +111,7 @@ Many things:
 - [ ] Hook up sigwinch events in cli and pass up to server
 - [ ] Grab the user details from the unix domain socket and pass to an
       authentication callback of some kind.
+- [ ] Provide a way for cli to connect to different unix domain paths
 - [ ] Completion of value types - strings, leaf lists, enums
 - [ ] Use the values extracted from terminfo properly
 - [ ] CTRL-c handling in the cli program
