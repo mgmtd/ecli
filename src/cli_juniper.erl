@@ -66,10 +66,6 @@ expand(Chars, #cli_juniper{mode = configuration} = J) ->
     io:format("expand config ~p~n",[Chars]),
     match_menu_item(Chars, configuration_menu(), J).
 
-execute("configure", #cli_juniper{mode = operational} = J) ->
-    {ok, "", J#cli_juniper{mode = configuration}};
-execute("exit", #cli_juniper{mode = configuration} = J) ->
-    {ok, "", J#cli_juniper{mode = operational}};
 execute(CmdStr, #cli_juniper{mode = operational} = J) ->
     io:format("Executing operational Command ~p~n",[CmdStr]),
     execute_menu_item(CmdStr, operational_menu(), J);
@@ -86,13 +82,15 @@ operational_menu() ->
     [#menu_item{node_type = container,
                 node = "show",
                 desc = "Show commands",
-                action = fun(Txn, Item, _Value) -> show_operational(Txn, Item) end,
+                action = fun(J, Item, _Value) ->
+                                 show_operational(J, Item)
+                         end,
                 children = fun() -> operational_show_menu() end
                },
      #menu_item{node_type = leaf,
                 node = "configure",
                 desc = "Enter configuration mode",
-                action = fun(J) -> enter_config_mode(J) end
+                action = fun(J, _, _) -> enter_config_mode(J) end
                },
      #menu_item{node_type = leaf,
                 node = "colose",
@@ -105,17 +103,17 @@ operational_show_menu() ->
     [#menu_item{node_type = leaf,
                 node = "status",
                 desc = "Status summary",
-                action = fun(J) -> show_status(J) end
+                action = fun(J, Item, _) -> show_status(J, Item) end
                },
      #menu_item{node_type = leaf,
                 node = "sockets",
                 desc = "Open sockets",
-                action = fun(J) -> show_status(J) end
+                action = fun(J, Item, _) -> show_status(J, Item) end
                },
      #menu_item{node_type = leaf,
                 node = "interface",
                 desc = "Interface status",
-                action = fun(J) -> show_interface_status(J) end
+                action = fun(J, Item, _) -> show_interface_status(J, Item) end
                }
      ].
 
@@ -133,7 +131,7 @@ configuration_menu() ->
      #menu_item{node_type = leaf,
                 node = "exit",
                 desc = "Exit configuration mode",
-                action = fun(J) -> show_interface_status(J) end
+                action = fun(J, _, _) -> exit_config_mode(J) end
                }
      ].
 
@@ -141,16 +139,20 @@ configuration_menu() ->
 %% Action implementations
 %%--------------------------------------------------------------------
 enter_config_mode(#cli_juniper{} = J) ->
-    Txn = cfg:transaction(configuration),
+    Txn = cfg:transaction(),
     {ok, "", J#cli_juniper{mode = configuration, user_txn = Txn}}.
 
-show_status(#cli_juniper{} = J) ->
+exit_config_mode(#cli_juniper{user_txn = Txn} = J) ->
+    cfg:exit_transaction(Txn),
+    {ok, "", J#cli_juniper{mode = operational, user_txn = undefined}}.
+
+show_status(#cli_juniper{} = J, _Item) ->
     {ok, "Status description\r\n", J}.
 
-show_interface_status(#cli_juniper{} = J) ->
+show_interface_status(#cli_juniper{} = J, _Item) ->
     {ok, "Interface statuses\r\n", J}.
 
-show_operational(_Txn, Item) ->
+show_operational(#cli_juniper{user_txn = _Txn}, Item) ->
     io:format("Executing show operational ~p~n",[Item]),
     {ok, "Operational statuses\r\n"}.
 
@@ -196,12 +198,14 @@ execute_menu_item(CmdStr, Menu, J) ->
             {ok, Reason, J};
         {ok, Cmd, Leaf, Value} ->
             Action = action(Cmd),
-            case catch Action(J#cli_juniper.user_txn, Leaf, Value) of
+            case catch Action(J, Leaf, Value) of
                 {'EXIT', Reason} ->
                     io:format("Executing configuration exit ~p~n",[Reason]),
                     {ok, "Error executing command", J};
                 {ok, Result} ->
                     {ok, Result, J};
+                {ok, Result, #cli_juniper{} = J1} ->
+                    {ok, Result, J1};
                 {ok, Result, UserTxn} ->
                     {ok, Result, J#cli_juniper{user_txn = UserTxn}}
             end

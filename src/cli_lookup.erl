@@ -23,8 +23,8 @@ lookup(Str, Tree, Getters, Cmd) ->
             case lookup_by_name(PathPart, Tree, Getters) of
                 {ok, Item} ->
                     return(Cmd, Item, "");
-                false ->
-                    {error, "Unknown command path"}
+                {error, _} = Err ->
+                   Err
             end;
         {PathPart, Tail} ->
             case lookup_by_name(PathPart, Tree, Getters) of
@@ -42,8 +42,8 @@ lookup(Str, Tree, Getters, Cmd) ->
                                     lookup(Tail, Children, Getters, Cmd)
                             end
                     end;
-                false ->
-                    {error, "Unknown command"}
+                {error, _} = Err ->
+                    Err
             end
     end.
 
