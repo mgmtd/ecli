@@ -36,9 +36,8 @@ distribution, with more from Stevens and various blog posts.
 Why?
 ----
 
-I don't want to have to build yet another closed source version of
-this. Now I don't work for a telecom supplier I have freedom to
-hack on telecom stuff of my own.
+Now I don't work for a telecom supplier I have freedom to hack on
+telecom stuff of my own.
 
 Build
 -----
