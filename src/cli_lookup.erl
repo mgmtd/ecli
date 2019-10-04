@@ -46,11 +46,17 @@ lookup(Str, Tree, Getters, Cmd) ->
                             return(Cmd, Item, Tail);
                         _ ->
                             ChildSpec = cli_util:get_children(Getters, Item),
-                            Children = cli_util:eval_childspec(ChildSpec),
+                            {Children, NewGetters} =
+                                case cli_util:eval_childspec(ChildSpec) of
+                                    {Cs, Gs} ->
+                                        {Cs, Gs};
+                                    Cs ->
+                                        {Cs, Getters}
+                                end,
                             if Cmd == undefined ->
-                                    lookup(Tail, Children, Getters, Item);
+                                    lookup(Tail, Children, NewGetters, Item);
                                true ->
-                                    lookup(Tail, Children, Getters, Cmd)
+                                    lookup(Tail, Children, NewGetters, Cmd)
                             end
                     end;
                 {error, _} = Err ->

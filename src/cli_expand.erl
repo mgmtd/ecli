@@ -99,6 +99,7 @@ match_cmds(Str, Menu, Gs) ->
                          lists:prefix(Str, Name)
                  end, Menu).
 
+chars_to_expand("", Match) -> Match ++ " ";
 chars_to_expand(Str, Match) ->
     lists:sublist(Match, length(Str) + 1, length(Match) - 1) ++ " ".
 
