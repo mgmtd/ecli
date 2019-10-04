@@ -15,3 +15,20 @@
          action_fun,
          node_type_fun
         }).
+
+-record(cli_sequence,
+        {
+         seq = []
+        }).
+
+-record(cli_tree,
+        {
+         tree_fun,
+         getters,
+         pipe_cmds = []
+        }).
+
+-record(cli_value,
+        {
+         value_fun
+        }).

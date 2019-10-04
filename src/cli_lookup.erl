@@ -12,6 +12,17 @@
 
 -export([lookup/3]).
 
+%% @doc Given a string in the form of a CLI command or path
+%% e.g. "set interface ge/0/0/0 enable true" and a schema tree, parse
+%% the string validating each level against the schema.
+%%
+%% Returns {error, Reason} if any part of the string does not match
+%% the schema.
+%%
+%% Returns {ok, Item, Tail} on a match, where Item is the final schema
+%% node matched, and Tail is the string following the final schema
+%% node if any.
+
 lookup(Str, Tree, Getters) ->
     lookup(Str, Tree, Getters, undefined).
 
@@ -29,12 +40,12 @@ lookup(Str, Tree, Getters, Cmd) ->
         {PathPart, Tail} ->
             case lookup_by_name(PathPart, Tree, Getters) of
                 {ok, Item} ->
-                    NodeType = cli_util:node_type(Getters, Item),
+                    NodeType = cli_util:get_node_type(Getters, Item),
                     case NodeType of
                         _ when NodeType == leaf orelse NodeType == leaf_list ->
                             return(Cmd, Item, Tail);
                         _ ->
-                            ChildSpec = cli_util:children(Getters, Item),
+                            ChildSpec = cli_util:get_children(Getters, Item),
                             Children = cli_util:eval_childspec(ChildSpec),
                             if Cmd == undefined ->
                                     lookup(Tail, Children, Getters, Item);
@@ -48,7 +59,7 @@ lookup(Str, Tree, Getters, Cmd) ->
     end.
 
 lookup_by_name(Name, [TreeItem|Tree], Getters) ->
-    case cli_util:name(Getters, TreeItem) of
+    case cli_util:get_name(Getters, TreeItem) of
         Name ->
             {ok, TreeItem};
         _ ->

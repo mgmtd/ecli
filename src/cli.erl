@@ -14,8 +14,12 @@
 -export([open/2, close/1]).
 
 -export([
-         getters/5,
-         expand/3,
+         getters/1,  getters/5,
+         sequence/1, tree/2, value/1
+        ]).
+
+-export([
+         expand/3, expand/4,
          lookup/3,
          format_menu/2
         ]).
@@ -55,6 +59,10 @@ close(Pid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+getters(Mod) when is_atom(Mod) ->
+    getters(fun Mod:name/1, fun Mod:desc/1, fun Mod:children/1,
+            fun Mod:action/1, fun Mod:node_type/1).
+
 getters(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun) ->
     #getters{
        name_fun = NameFun,
@@ -65,12 +73,32 @@ getters(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun) ->
       }.
 
 %%--------------------------------------------------------------------
-%% @doc Given a partial or full string and a tree of items expand as
-%%      far as possible or show a menu
+%% @doc Create a more complex spec for children in the cli tree
+%%--------------------------------------------------------------------
+sequence(Seq) ->
+    #cli_sequence{seq = Seq}.
+
+tree(Fun, Opts) ->
+    #cli_tree{tree_fun = Fun,
+              getters = proplists:get_value(getters, Opts),
+              pipe_cmds = proplists:get_value(pipe_cmds, Opts, [])
+             }.
+
+value(Fun) ->
+    #cli_value{value_fun = Fun}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%%  Given a partial or full string and a tree of items, expand as
+%%  far as possible or show a menu. If a TargetNodeType is provided
+%%  stop when a single node of that type is reached
 %% @end
 %%--------------------------------------------------------------------
 expand(Str, Tree, Getters) ->
     cli_expand:expand(Str, Tree, Getters).
+
+expand(Str, Tree, Getters, UserTxn) ->
+    cli_expand:expand(Str, Tree, Getters, UserTxn).
 
 %%--------------------------------------------------------------------
 %% @doc Given a full command string and a tree of items return false
@@ -93,14 +121,14 @@ format_menu([], _) -> "";
 format_menu(Items, Getters) ->
     MaxCmdLen = max_cmd_len(Items, Getters),
     Menu = lists:map(fun(Item) ->
-                             Cmd = cli_util:name(Getters, Item),
-                             Desc = cli_util:description(Getters, Item),
+                             Cmd = cli_util:get_name(Getters, Item),
+                             Desc = cli_util:get_description(Getters, Item),
                              [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
                      end, Items),
     ["\r\n", Menu].
 
 max_cmd_len(Items, Gs) ->
-    lists:max(lists:map(fun(Item) -> length(cli_util:name(Gs, Item)) end, Items)).
+    lists:max(lists:map(fun(Item) -> length(cli_util:get_name(Gs, Item)) end, Items)).
 
 pad(Str, Len) ->
     Pad = lists:duplicate(Len - length(Str), $\s),
