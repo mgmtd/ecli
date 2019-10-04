@@ -192,8 +192,8 @@ match_menu_item(Str, Menu, J) ->
     case cli:expand(Str, Menu, getters()) of
         no ->
             {no, [], [], J};
-        {yes, Extra, MenuItems, Getters} ->
-            {yes, Extra, cli:format_menu(MenuItems, Getters), J}
+        {yes, Extra, MenuItems} ->
+            {yes, Extra, MenuItems, J}
     end.
 
 execute_menu_item(CmdStr, Menu, J) ->
