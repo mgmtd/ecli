@@ -24,16 +24,16 @@
 %% node if any.
 
 lookup(Str, Tree, Getters) ->
-    lookup(Str, Tree, Getters, undefined).
+    lookup(Str, Tree, Getters, undefined, []).
 
-lookup(Str, Tree, Getters, Cmd) ->
+lookup(Str, Tree, Getters, Cmd, Acc) ->
     case next_token(Str) of
         {[],_} ->
             {error, "Unknown no token"};
         {PathPart, []} ->
             case lookup_by_name(PathPart, Tree, Getters) of
                 {ok, Item} ->
-                    return(Cmd, Item, "");
+                    return(Cmd, [Item|Acc], "");
                 {error, _} = Err ->
                    Err
             end;
@@ -43,7 +43,7 @@ lookup(Str, Tree, Getters, Cmd) ->
                     NodeType = cli_util:get_node_type(Getters, Item),
                     case NodeType of
                         _ when NodeType == leaf orelse NodeType == leaf_list ->
-                            return(Cmd, Item, Tail);
+                            return(Cmd, [Item|Acc], Tail);
                         _ ->
                             ChildSpec = cli_util:get_children(Getters, Item),
                             {Children, NewGetters} =
@@ -54,9 +54,9 @@ lookup(Str, Tree, Getters, Cmd) ->
                                         {Cs, Getters}
                                 end,
                             if Cmd == undefined ->
-                                    lookup(Tail, Children, NewGetters, Item);
+                                    lookup(Tail, Children, NewGetters, [Item], Acc);
                                true ->
-                                    lookup(Tail, Children, NewGetters, Cmd)
+                                    lookup(Tail, Children, NewGetters, Cmd, [Item|Acc])
                             end
                     end;
                 {error, _} = Err ->
@@ -74,13 +74,13 @@ lookup_by_name(Name, [TreeItem|Tree], Getters) ->
 lookup_by_name(_, [], _) ->
     {error, "No such command"}.
 
-return(Cmd, Item, Tail) ->
+return(Cmd, Items, Tail) ->
     if Cmd == undefined ->
-            %% Assume the first node encountered is
+            %% Assume the first nodes encountered are
             %% the command (i.e. show|set etc)
-            {ok, Item, undefined, Tail};
+            {ok, Items, undefined, Tail};
        true ->
-            {ok, Cmd, Item, Tail}
+            {ok, Cmd, lists:reverse(Items), Tail}
     end.
 
 next_token(Str) ->

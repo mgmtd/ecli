@@ -40,9 +40,9 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link(pid(), inet:socket(), atom()) -> {ok, pid()}.
 start_link(ListenPid, ListenSocket, CliMod) ->
     gen_server:start_link(?MODULE, [ListenPid, ListenSocket, CliMod], []).
 

@@ -197,9 +197,9 @@ execute_menu_item(CmdStr, Menu, J) ->
     case cli:lookup(CmdStr, Menu, getters()) of
         {error, Reason} ->
             {ok, Reason, J};
-        {ok, Cmd, Leaf, Value} ->
-            Action = action(Cmd),
-            case catch Action(J, Leaf, Value) of
+        {ok, Cmd, Path, Value} ->
+            Action = action(tl(Cmd)),
+            case catch Action(J, Path, Value) of
                 {'EXIT', Reason} ->
                     io:format("Executing configuration exit ~p~n",[Reason]),
                     {ok, "Error executing command", J};
