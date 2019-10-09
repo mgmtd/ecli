@@ -10,7 +10,7 @@
 %%%-------------------------------------------------------------------
 -module(cli_lookup).
 
--export([lookup/3]).
+-export([lookup/4]).
 
 %% @doc Given a string in the form of a CLI command or path
 %% e.g. "set interface ge/0/0/0 enable true" and a schema tree, parse
@@ -23,10 +23,11 @@
 %% node matched, and Tail is the string following the final schema
 %% node if any.
 
-lookup(Str, Tree, Getters) ->
-    lookup(Str, Tree, Getters, undefined, []).
+lookup(Str, Tree, Getters, Txn) ->
+    io:format("lookup ~p~n Tree: ~p~n Getters:~p~n Txn:~p~n",[Str, Tree, Getters, Txn]),
+    lookup(Str, Tree, Getters, Txn, undefined, []).
 
-lookup(Str, Tree, Getters, Cmd, Acc) ->
+lookup(Str, Tree, Getters, Txn, Cmd, Acc) ->
     case next_token(Str) of
         {[],_} ->
             {error, "Unknown no token"};
@@ -45,18 +46,18 @@ lookup(Str, Tree, Getters, Cmd, Acc) ->
                         _ when NodeType == leaf orelse NodeType == leaf_list ->
                             return(Cmd, [Item|Acc], Tail);
                         _ ->
-                            ChildSpec = cli_util:get_children(Getters, Item),
-                            {Children, NewGetters} =
+                            ChildSpec = cli_util:get_children(Getters, Item, Txn),
+                            {Children, NewGetters, AddingListItem} =
                                 case cli_util:eval_childspec(ChildSpec) of
-                                    {Cs, Gs} ->
-                                        {Cs, Gs};
+                                    {Cs, Gs, AddingListItem1} ->
+                                        {Cs, Gs, AddingListItem1};
                                     Cs ->
-                                        {Cs, Getters}
+                                        {Cs, Getters, false}
                                 end,
                             if Cmd == undefined ->
-                                    lookup(Tail, Children, NewGetters, [Item], Acc);
+                                    lookup(Tail, Children, NewGetters, Txn, [Item], Acc);
                                true ->
-                                    lookup(Tail, Children, NewGetters, Cmd, [Item|Acc])
+                                    lookup(Tail, Children, NewGetters, Txn, Cmd, [Item|Acc])
                             end
                     end;
                 {error, _} = Err ->

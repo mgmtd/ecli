@@ -25,7 +25,8 @@
         {
          tree_fun,
          getters,
-         pipe_cmds = []
+         pipe_cmds = [],
+         add_list_items = false
         }).
 
 -record(cli_value,

@@ -11,8 +11,10 @@
 -include("cli.hrl").
 
 -export([get_name/2, get_description/2,
-         get_children/2, get_action/2,
-         get_node_type/2, eval_childspec/1, eval_childspec/2]).
+         get_children/3, get_children/4, get_action/2,
+         get_node_type/2]).
+
+-export([eval_childspec/1, eval_childspec/2]).
 
 -export([strip_ws/1]).
 
@@ -23,9 +25,22 @@ get_name(#getters{name_fun = Fn}, Item) -> Fn(Item).
 
 get_description(#getters{desc_fun = Fn}, Item) -> Fn(Item).
 
-get_children(#getters{children_fun = Fn}, Item) ->
+get_children(#getters{children_fun = Fn}, Item, Txn) ->
     io:format("cli_util children ~p~n", [erlang:fun_info(Fn)]),
-    Fn(Item).
+    case erlang:fun_info(Fn, arity) of
+        {arity, 1} -> Fn(Item);
+        {arity, 2} -> Fn(Item, Txn);
+        {arity, 3} -> Fn(Item, Txn, false)
+    end.
+
+get_children(#getters{children_fun = Fn}, Item, Txn, AddListItems) ->
+    io:format("cli_util children ~p~n", [erlang:fun_info(Fn)]),
+    case erlang:fun_info(Fn, arity) of
+        {arity, 1} -> Fn(Item);
+        {arity, 2} -> Fn(Item, Txn);
+        {arity, 3} -> Fn(Item, Txn, AddListItems)
+    end.
+
 
 get_node_type(#getters{node_type_fun = Fn}, Item) -> Fn(Item).
 
@@ -38,8 +53,9 @@ eval_childspec(S) ->
 
 eval_childspec(#cli_sequence{seq = [Seq|_]}, Txn) ->
     eval_childspec(Seq, Txn);
-eval_childspec(#cli_tree{tree_fun = Fun, getters = Getters}, Txn) ->
-    {Fun(Txn), Getters};
+eval_childspec(#cli_tree{tree_fun = Fun, getters = Getters,
+                         add_list_items = ALI}, Txn) ->
+    {Fun(Txn), Getters, ALI};
 eval_childspec(F, Arg) when is_function(F) ->
     case erlang:fun_info(F, arity) of
         {arity, 0} -> F();

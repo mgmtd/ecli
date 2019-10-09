@@ -20,7 +20,7 @@
 
 -export([
          expand/3, expand/4,
-         lookup/3,
+         lookup/4,
          format_menu/2
         ]).
 
@@ -49,11 +49,12 @@ close(Pid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Create a #getters{} record to tell cli how to navigate the tree
 %%
 %% This module doesn't care about the structure of the individual
 %% elements in the tree it is operating on, all it needs to know is
 %% how to extract the name of the node, its description and
-%% children. Subsystems providing part of a cli tree must provide
+%% children. Systems providing part of a cli tree must provide
 %% their own functions to extract these fields from their own tree
 %% items.
 %%
@@ -81,7 +82,8 @@ sequence(Seq) ->
 tree(Fun, Opts) ->
     #cli_tree{tree_fun = Fun,
               getters = proplists:get_value(getters, Opts),
-              pipe_cmds = proplists:get_value(pipe_cmds, Opts, [])
+              pipe_cmds = proplists:get_value(pipe_cmds, Opts, []),
+              add_list_items = proplists:get_value(add_list_items, Opts, false)
              }.
 
 value(Fun) ->
@@ -107,9 +109,9 @@ expand(Str, Tree, Getters, UserTxn) ->
 %%      command.
 %% @end
 %%--------------------------------------------------------------------
--spec lookup(Path::string(), Tree::term(), proplists:proplist()) -> {ok, fun()} | false.
-lookup(Str, Tree, Getters) ->
-    cli_lookup:lookup(Str, Tree, Getters).
+-spec lookup(Path::string(), Tree::term(), proplists:proplist(), term()) -> {ok, fun()} | false.
+lookup(Str, Tree, Getters, Txn) ->
+    cli_lookup:lookup(Str, Tree, Getters, Txn).
 
 
 %%--------------------------------------------------------------------
@@ -118,7 +120,15 @@ lookup(Str, Tree, Getters) ->
 %% @end
 %%--------------------------------------------------------------------
 format_menu([], _) -> "";
-format_menu(Items, Getters) ->
+format_menu([I|_] = Items, Getters) ->
+    case cli_util:get_node_type(Getters, I) of
+        new_list_item ->
+            format_list_menu(Items, Getters);
+        _ ->
+            format_normal_menu(Items, Getters)
+    end.
+
+format_normal_menu(Items, Getters) ->
     MaxCmdLen = max_cmd_len(Items, Getters),
     Menu = lists:map(fun(Item) ->
                              Cmd = cli_util:get_name(Getters, Item),
@@ -127,6 +137,21 @@ format_menu(Items, Getters) ->
                      end, Items),
     ["\r\n", Menu].
 
+format_list_menu([I|Items], Getters) ->
+    %% The first item is passed as a placeholder for a new list key
+    %% which is needed if this is a set command.
+    NewItem = ["Add new entry\r\n", cli_util:get_name(Getters, I),"\r\n"],
+    Select = "Select from the following\r\n",
+    MaxCmdLen = max_cmd_len(Items, Getters),
+    Menu = lists:map(fun(Item) ->
+                             Cmd = cli_util:get_name(Getters, Item),
+                             Desc = cli_util:get_description(Getters, Item),
+                             [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
+                     end, Items),
+    ["\r\n", NewItem, Select, Menu].
+
+max_cmd_len([], _Gs) ->
+    0;
 max_cmd_len(Items, Gs) ->
     lists:max(lists:map(fun(Item) -> length(cli_util:get_name(Gs, Item)) end, Items)).
 
