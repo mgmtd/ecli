@@ -14,7 +14,7 @@
 -export([open/2, close/1]).
 
 -export([
-         getters/1,  getters/5,
+         accessors/1,  accessors/5, accessors/8,
          sequence/1, tree/2, value/1
         ]).
 
@@ -49,7 +49,7 @@ close(Pid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create a #getters{} record to tell cli how to navigate the tree
+%% Create a #accessors{} record to tell cli how to navigate the tree
 %%
 %% This module doesn't care about the structure of the individual
 %% elements in the tree it is operating on, all it needs to know is
@@ -60,17 +60,30 @@ close(Pid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-getters(Mod) when is_atom(Mod) ->
-    getters(fun Mod:name/1, fun Mod:desc/1, fun Mod:children/1,
-            fun Mod:action/1, fun Mod:node_type/1).
+accessors(Mod) when is_atom(Mod) ->
+    accessors(fun Mod:name/1, fun Mod:desc/1, fun Mod:children/1,
+              fun Mod:action/1, fun Mod:node_type/1,
+              fun Mod:list_key_names/1, fun Mod:list_key_values/1,
+              fun Mod:set_list_key_values/2).
 
-getters(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun) ->
-    #getters{
+accessors(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun, ListKeyNamesFun, ListKeyValuesFun, SetListKeyValuesFun) ->
+    A = accessors(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun),
+    A#accessors{
+      list_key_names_fun = ListKeyNamesFun,
+      list_key_values_fun = ListKeyValuesFun,
+      set_list_key_values_fun = SetListKeyValuesFun
+     }.
+
+accessors(NameFun, DescFun, ChildrenFun, ActionFun, NodeTypeFun) ->
+    #accessors{
        name_fun = NameFun,
        desc_fun = DescFun,
        children_fun = ChildrenFun,
        action_fun = ActionFun,
-       node_type_fun = NodeTypeFun
+       node_type_fun = NodeTypeFun,
+       list_key_names_fun = fun(_) -> [] end,
+       list_key_values_fun = fun(_) -> [] end,
+       set_list_key_values_fun = fun(X) -> X end
       }.
 
 %%--------------------------------------------------------------------
@@ -81,7 +94,7 @@ sequence(Seq) ->
 
 tree(Fun, Opts) ->
     #cli_tree{tree_fun = Fun,
-              getters = proplists:get_value(getters, Opts),
+              accessors = proplists:get_value(accessors, Opts),
               pipe_cmds = proplists:get_value(pipe_cmds, Opts, []),
               add_list_items = proplists:get_value(add_list_items, Opts, false)
              }.
@@ -96,11 +109,11 @@ value(Fun) ->
 %%  stop when a single node of that type is reached
 %% @end
 %%--------------------------------------------------------------------
-expand(Str, Tree, Getters) ->
-    cli_expand:expand(Str, Tree, Getters).
+expand(Str, Tree, Accessors) ->
+    cli_expand:expand(Str, Tree, Accessors).
 
-expand(Str, Tree, Getters, UserTxn) ->
-    cli_expand:expand(Str, Tree, Getters, UserTxn).
+expand(Str, Tree, Accessors, UserTxn) ->
+    cli_expand:expand(Str, Tree, Accessors, UserTxn).
 
 %%--------------------------------------------------------------------
 %% @doc Given a full command string and a tree of items return false
@@ -110,8 +123,8 @@ expand(Str, Tree, Getters, UserTxn) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec lookup(Path::string(), Tree::term(), proplists:proplist(), term()) -> {ok, fun()} | false.
-lookup(Str, Tree, Getters, Txn) ->
-    cli_lookup:lookup(Str, Tree, Getters, Txn).
+lookup(Str, Tree, Accessors, Txn) ->
+    cli_lookup:lookup(Str, Tree, Accessors, Txn).
 
 
 %%--------------------------------------------------------------------
@@ -120,32 +133,32 @@ lookup(Str, Tree, Getters, Txn) ->
 %% @end
 %%--------------------------------------------------------------------
 format_menu([], _) -> "";
-format_menu([I|_] = Items, Getters) ->
-    case cli_util:get_node_type(Getters, I) of
+format_menu([I|_] = Items, Accessors) ->
+    case cli_util:get_node_type(Accessors, I) of
         new_list_item ->
-            format_list_menu(Items, Getters);
+            format_list_menu(Items, Accessors);
         _ ->
-            format_normal_menu(Items, Getters)
+            format_normal_menu(Items, Accessors)
     end.
 
-format_normal_menu(Items, Getters) ->
-    MaxCmdLen = max_cmd_len(Items, Getters),
+format_normal_menu(Items, Accessors) ->
+    MaxCmdLen = max_cmd_len(Items, Accessors),
     Menu = lists:map(fun(Item) ->
-                             Cmd = cli_util:get_name(Getters, Item),
-                             Desc = cli_util:get_description(Getters, Item),
+                             Cmd = cli_util:get_name(Accessors, Item),
+                             Desc = cli_util:get_description(Accessors, Item),
                              [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
                      end, Items),
     ["\r\n", Menu].
 
-format_list_menu([I|Items], Getters) ->
+format_list_menu([I|Items], Accessors) ->
     %% The first item is passed as a placeholder for a new list key
     %% which is needed if this is a set command.
-    NewItem = ["Add new entry\r\n", cli_util:get_name(Getters, I),"\r\n"],
+    NewItem = ["Add new entry\r\n", cli_util:get_name(Accessors, I),"\r\n"],
     Select = "Select from the following\r\n",
-    MaxCmdLen = max_cmd_len(Items, Getters),
+    MaxCmdLen = max_cmd_len(Items, Accessors),
     Menu = lists:map(fun(Item) ->
-                             Cmd = cli_util:get_name(Getters, Item),
-                             Desc = cli_util:get_description(Getters, Item),
+                             Cmd = cli_util:get_name(Accessors, Item),
+                             Desc = cli_util:get_description(Accessors, Item),
                              [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
                      end, Items),
     ["\r\n", NewItem, Select, Menu].

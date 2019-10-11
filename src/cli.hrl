@@ -7,13 +7,16 @@
 %%% Created : 17 Sep 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
 
--record(getters,
+-record(accessors,
         {
          name_fun,
          desc_fun,
          children_fun,
          action_fun,
-         node_type_fun
+         node_type_fun,
+         list_key_names_fun,
+         list_key_values_fun,
+         set_list_key_values_fun
         }).
 
 -record(cli_sequence,
@@ -24,7 +27,7 @@
 -record(cli_tree,
         {
          tree_fun,
-         getters,
+         accessors,
          pipe_cmds = [],
          add_list_items = false
         }).

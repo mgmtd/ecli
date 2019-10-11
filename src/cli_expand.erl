@@ -79,6 +79,7 @@ expand([$\s], [], _, _, _, _) ->
     %% End of input after a space, but no matchable children
     no;
 expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
+    io:format("expand space at end Items = ~p Matched = ~p~n",[length(Items), MatchedChars]),
     %% Its the end of the input after a space, we want to show menus
     case Items of
         [Item] ->
@@ -87,7 +88,7 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
             NodeType = cli_util:get_node_type(Gs, Item),
             if NodeType == new_list_item andalso AddListItems == true ->
                     %% Adding the first new list item
-                    io:format("NEW LIST ITEM ~p~n", [Item]),
+                    %% io:format("NEW LIST ITEM ~p~n", [Item]),
                     Menu = cli:format_menu(Items, Gs),
                     {yes, "", Menu};
                Name == MatchedChars ->
@@ -95,9 +96,16 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
                     %% in a menu
                     {Children, NewGs, NewAddListItems} =
                         menu_item_children(Item, Txn, Gs, AddListItems),
-                    io:format("Children = ~p~n",[Children]),
-                    Menu = cli:format_menu(Children, NewGs),
-                    {yes, "", Menu};
+                    %% io:format("cli_expand: after spc children = ~p~n",[Children]),
+                    case Children of
+                        [One] when NodeType /= list ->
+                            %% Only one - just fill it in for the user
+                            OneName = cli_util:get_name(NewGs, One),
+                            {yes, OneName ++ " ", ""};
+                        _ ->
+                            Menu = cli:format_menu(Children, NewGs),
+                            {yes, "", Menu}
+                    end;
                true ->
                     %% The user didn't type all the characters, but it
                     %% was enough to identify the single node. Insert the
@@ -108,25 +116,46 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
                     %% again to see the menu.
                     {yes, chars_to_expand(MatchedChars, Name), []}
             end;
-        _MultipleItems ->
-            %% Still a number of matching menu items. auto fill up to
-            %% the point they diverge
-            Chars = expand_menus(MatchedChars, Items, Gs),
-            Menu = cli:format_menu(Items, Gs),
-            {yes, Chars, Menu}
+        [Item|_] ->
+            NodeType = cli_util:get_node_type(Gs, Item),
+            if NodeType == new_list_item andalso AddListItems == true ->
+                    %% This is the first list item
+                    {Children, NewGs, NewAddListItems} =
+                        menu_item_children(Item, Txn, Gs, AddListItems),
+                    %% io:format("Children new list = ~p of item ~p~n",[Children, Item]),
+                    Menu = cli:format_menu(Children, NewGs),
+                    {yes, "", Menu};
+               true ->
+                    %% Still a number of matching menu items. auto fill up to
+                    %% the point they diverge
+                    Chars = expand_menus(MatchedChars, Items, Gs),
+                    Menu = cli:format_menu(Items, Gs),
+                    {yes, Chars, Menu}
+            end
     end;
 expand([$\s|Cs], [Item], MatchedChars, Gs, AddListItems, Txn) ->
-    io:format("expand space ~p matched = ~p~n",[Item, MatchedChars]),
+    io:format("expand space ~p matched = ~p~n",[1, MatchedChars]),
     Node = cli_util:get_name(Gs, Item),
     case MatchedChars of
-        Node                                                  ->
+        Node ->
             %% Matched a full single level in the command tree with a
             %% following space. Carry on to children
-            io:format("expand matched full level ~p~p~n",[Node,Item]),
+            %% io:format("expand matched full level ~p~p~n",[Node,Item]),
             {Children, NewGs, NewAddListItems} =
                 menu_item_children(Item, Txn, Gs, AddListItems),
             expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
-        _                                                     ->
+        _ ->
+            no
+    end;
+expand([$\s|Cs], [Item | _] = MenuItems, MatchedChars, Gs, AddListItems, Txn) ->
+    NodeType = cli_util:get_node_type(Gs, Item),
+    if  NodeType == new_list_item andalso AddListItems == true ->
+            %% Reached a space in the middle. If we are adding a list
+            %% item use it and move on
+            {Children, NewGs, NewAddListItems} =
+                menu_item_children(Item, Txn, Gs, AddListItems),
+            expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
+        true ->
             no
     end;
 expand([C|Cs], MenuItems, Matched, Gs, AddListItems, Txn) ->
@@ -173,7 +202,6 @@ chars_to_expand(Str, Match) ->
 %% the items inside the list item, minus the list key names.
 menu_item_children(Item, Txn, Gs, AddListItems) ->
     Cs = cli_util:get_children(Gs, Item, Txn, AddListItems),
-    io:format("Children = ~p~n",[Cs]),
     case cli_util:eval_childspec(Cs, Txn) of
         {Children, Getters} ->
             {Children, Getters, AddListItems};
@@ -187,6 +215,7 @@ menu_item_children(Item, Txn, Gs, AddListItems) ->
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"
 expand_menus(Str, Menus, Gs) ->
+    io:format("cli_expand:expand_menus ~p~n ~p~n ~p ~n",[Str, Menus, Gs]),
     StrLen = length(Str),
     Suffixes = lists:map(fun(Item) ->
                                  Name = cli_util:get_name(Gs, Item),
