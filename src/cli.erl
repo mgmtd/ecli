@@ -146,20 +146,20 @@ format_normal_menu(Items, Accessors) ->
     Menu = lists:map(fun(Item) ->
                              Cmd = cli_util:get_name(Accessors, Item),
                              Desc = cli_util:get_description(Accessors, Item),
-                             [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
+                             ["  ", pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
                      end, Items),
     ["\r\n", Menu].
 
 format_list_menu([I|Items], Accessors) ->
     %% The first item is passed as a placeholder for a new list key
     %% which is needed if this is a set command.
-    NewItem = ["Add new entry\r\n", cli_util:get_name(Accessors, I),"\r\n"],
-    Select = "Select from the following\r\n",
+    NewItem = ["Add new entry\r\n  ",cli_util:get_name(Accessors, I),"\r\n"],
+    Select = "Select from the existing entries\r\n",
     MaxCmdLen = max_cmd_len(Items, Accessors),
     Menu = lists:map(fun(Item) ->
                              Cmd = cli_util:get_name(Accessors, Item),
                              Desc = cli_util:get_description(Accessors, Item),
-                             [pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
+                             ["  ", pad(Cmd, MaxCmdLen + 1), "\r\n"]
                      end, Items),
     ["\r\n", NewItem, Select, Menu].
 
