@@ -10,6 +10,8 @@
 %%%-------------------------------------------------------------------
 -module(cli_lookup).
 
+-include("debug.hrl").
+
 -export([lookup/4]).
 
 %% @doc Given a string in the form of a CLI command or path
@@ -24,7 +26,7 @@
 %% string following the final schema node if any.
 
 lookup(Str, Tree, Accessors, Txn) ->
-    io:format("lookup ~p~n Tree: ~p~n Accessors:~p~n Txn:~p~n",[Str, Tree, Accessors, Txn]),
+    %% ?DBG("lookup ~p~n Tree: ~p~n Accessors:~p~n Txn:~p~n",[Str, Tree, Accessors, Txn]),
     lookup(Str, Tree, Accessors, Txn, undefined, []).
 
 lookup(Str, Tree, Accessors, Txn, Cmd, Acc) ->
@@ -53,7 +55,7 @@ lookup(Str, Tree, Accessors, Txn, Cmd, Acc) ->
                             %% list_values entries, which we can use
                             KeyNames = cli_util:get_list_key_names(Accessors,
                                                                    Item),
-                            io:format("KEY NAMES ~p~n",[KeyNames]),
+                            ?DBG("KEY NAMES ~p~n",[KeyNames]),
                             %% The length of KeyNames tells us how
                             %% many command parts to fetch to make up
                             %% the list key

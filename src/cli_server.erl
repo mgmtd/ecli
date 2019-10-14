@@ -8,6 +8,8 @@
 %%%-------------------------------------------------------------------
 -module(cli_server).
 
+-include("debug.hrl").
+
 -behaviour(gen_server).
 
 %% API
@@ -141,7 +143,7 @@ handle_info({tcp, Socket, Data}, #state{got_meta = false,
     {noreply, State#state{got_meta = true, term = Term1,
                           edlin = Edlin, cli_state = CliState}};
 handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
-    %% io:format("GOT ~p~n",[Data]),
+    %% ?DBG("GOT ~p~n",[Data]),
 
     %% We have one or more chars. Normal chars get appended to the
     %% current line, ctrl chars affect the current line in various
@@ -200,7 +202,7 @@ code_change(_OldVsn, State, _Extra) ->
 get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
     case cli_edlin:insert(CharList, State#state.edlin) of
         {more_chars, Edlin, Ops} ->
-            %% io:format("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
+            %% ?DBG("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
             Term = send_drv(Ops, State#state.socket, State#state.term),
             {ok, State#state{edlin = Edlin, term = Term}};
         {expand, Before0, Cs0, Edlin} ->
@@ -226,7 +228,7 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
                 end,
             get_chars_loop(Cs, State#state{edlin = Edlin, cli_state = CliState});
         {done, FullLine, Cs, Ops} ->
-            io:format("CMD: ~p~n",[FullLine]),
+            ?DBG("CMD: ~p~n",[FullLine]),
             {ok, Output, CliState} = CliMod:execute(FullLine, State#state.cli_state),
             ok = send_raw("\r\n", State),
             ok = send_raw(Output, State),
@@ -241,16 +243,16 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
 
 
 send_drv(Ops, Socket, Term0) ->
-    %% io:format("Sending Ops~p\r\n",[Ops]),
-    %% io:format("Term before ~s\r\n",[cli_term:print(Term0)]),
+    %% ?DBG("Sending Ops~p\r\n",[Ops]),
+    %% ?DBG("Term before ~s\r\n",[cli_term:print(Term0)]),
     {Bytes, Term} = cli_term:send_ops(Ops, Term0),
-    %% io:format("Term after ~s\r\n",[cli_term:print(Term)]),
+    %% ?DBG("Term after ~s\r\n",[cli_term:print(Term)]),
     ok = gen_tcp:send(Socket, Bytes),
     inet:setopts(Socket, [{active, once}]),
     Term.
 
 send_raw(Bytes, #state{socket = Socket}) ->
-    %% io:format("Sending raw ~p\r\n",[Bytes]),
+    ?DBG("Sending raw ~p\r\n",[Bytes]),
     ok = gen_tcp:send(Socket, Bytes).
 
 %% Assumes that arg is a string
