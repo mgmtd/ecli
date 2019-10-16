@@ -9,6 +9,7 @@
 -module(cli).
 
 -include("cli.hrl").
+-include("debug.hrl").
 
 %% API
 -export([open/2, close/1]).
@@ -153,7 +154,8 @@ format_normal_menu(Items, Accessors) ->
 format_list_menu([I|Items], Accessors) ->
     %% The first item is passed as a placeholder for a new list key
     %% which is needed if this is a set command.
-    NewItem = ["Add new entry\r\n  ",cli_util:get_name(Accessors, I),"\r\n"],
+    KeyName = hd(cli_util:get_list_key_names(Accessors, I)),
+    NewItem = ["Add new entry\r\n  <", KeyName, ">\r\n"],
     Select = "Select from the existing entries\r\n",
     MaxCmdLen = max_cmd_len(Items, Accessors),
     Menu = lists:map(fun(Item) ->
