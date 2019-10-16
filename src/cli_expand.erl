@@ -82,6 +82,7 @@ expand([$\s], [], _, _, _, _) ->
     no;
 expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
     ?DBG("expand space at end Items = ~p Matched = ~p~n",[length(Items), MatchedChars]),
+    ?DBG("Items ~p~n",[Items]),
     %% Its the end of the input after a space, we want to show menus
     case Items of
         [Item] ->
@@ -91,7 +92,9 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
             if NodeType == new_list_item andalso AddListItems == true ->
                     %% Adding the first new list item
                     %% ?DBG("NEW LIST ITEM ~p~n", [Item]),
-                    Menu = cli:format_menu(Items, Gs),
+                    {Children, NewGs, NewAddListItems} =
+                        menu_item_children(Item, Txn, Gs, AddListItems),
+                    Menu = cli:format_menu(Children, NewGs),
                     {yes, "", Menu};
                Name == MatchedChars ->
                     %% The current node is the one, show its children
@@ -124,7 +127,7 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
                     %% This is the first list item
                     {Children, NewGs, NewAddListItems} =
                         menu_item_children(Item, Txn, Gs, AddListItems),
-                    %% ?DBG("Children new list = ~p of item ~p~n",[Children, Item]),
+                    ?DBG("Children new list = ~p of item ~p~n",[Children, Item]),
                     Menu = cli:format_menu(Children, NewGs),
                     {yes, "", Menu};
                true ->
@@ -137,7 +140,9 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
     end;
 expand([$\s|Cs], [Item], MatchedChars, Gs, AddListItems, Txn) ->
     ?DBG("expand space ~p matched = ~p~n",[1, MatchedChars]),
+    ?DBG("expand space Item ~p~n",[Item]),
     Node = cli_util:get_name(Gs, Item),
+    NodeType = cli_util:get_node_type(Gs, Item),
     case MatchedChars of
         Node ->
             %% Matched a full single level in the command tree with a
@@ -145,6 +150,13 @@ expand([$\s|Cs], [Item], MatchedChars, Gs, AddListItems, Txn) ->
             %% ?DBG("expand matched full level ~p~p~n",[Node,Item]),
             {Children, NewGs, NewAddListItems} =
                 menu_item_children(Item, Txn, Gs, AddListItems),
+            ?DBG("expand space Childrten ~p~n",[Children]),
+            expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
+        _ when NodeType == new_list_item andalso AddListItems == true ->
+            %% we got a list key, carry on down the tree
+            {Children, NewGs, NewAddListItems} =
+                menu_item_children(Item, Txn, Gs, AddListItems),
+            ?DBG("expand space Childrten ~p~n",[Children]),
             expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
         _ ->
             no
@@ -161,7 +173,7 @@ expand([$\s|Cs], [Item | _] = MenuItems, MatchedChars, Gs, AddListItems, Txn) ->
             no
     end;
 expand([C|Cs], MenuItems, Matched, Gs, AddListItems, Txn) ->
-    ?DBG("expand normal chars ~p matched = ~p~n",[C, Matched]),
+    %% ?DBG("expand normal chars ~p matched = ~p~n",[C, Matched]),
     SoFar = Matched ++ [C],
     Matches = match_cmds(SoFar, MenuItems, Gs),
     case Matches of

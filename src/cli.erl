@@ -154,7 +154,9 @@ format_normal_menu(Items, Accessors) ->
 format_list_menu([I|Items], Accessors) ->
     %% The first item is passed as a placeholder for a new list key
     %% which is needed if this is a set command.
-    KeyName = hd(cli_util:get_list_key_names(Accessors, I)),
+    KeyNames = cli_util:get_list_key_names(Accessors, I),
+    KeyValues = cli_util:get_list_key_values(Accessors, I),
+    KeyName = next_list_key(KeyNames, KeyValues),
     NewItem = ["Add new entry\r\n  <", KeyName, ">\r\n"],
     Select = "Select from the existing entries\r\n",
     MaxCmdLen = max_cmd_len(Items, Accessors),
@@ -164,6 +166,14 @@ format_list_menu([I|Items], Accessors) ->
                              ["  ", pad(Cmd, MaxCmdLen + 1), "\r\n"]
                      end, Items),
     ["\r\n", NewItem, Select, Menu].
+
+next_list_key(_, [Key|_]) ->
+    Key;
+next_list_key([Name|Ns], [Name|Ks]) ->
+    next_list_key(Ns, Ks);
+next_list_key([], [Key|_]) ->
+    Key.
+
 
 max_cmd_len([], _Gs) ->
     0;
