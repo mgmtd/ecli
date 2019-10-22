@@ -12,7 +12,7 @@
 
 -include("debug.hrl").
 
--export([lookup/4]).
+-export([lookup/3]).
 
 %% @doc Given a string in the form of a CLI command or path
 %% e.g. "set interface ge/0/0/0 enable true" and a schema tree, parse
@@ -25,25 +25,24 @@
 %% schema nodes for the full path to the node matched, and Tail is the
 %% string following the final schema node if any.
 
-lookup(Str, Tree, Accessors, Txn) ->
-    %% ?DBG("lookup ~p~n Tree: ~p~n Accessors:~p~n Txn:~p~n",[Str, Tree, Accessors, Txn]),
-    lookup(Str, Tree, Accessors, Txn, undefined, []).
+lookup(Str, Tree, Txn) ->
+    %% ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
+    lookup(Str, Tree, Txn, undefined, []).
 
-lookup(Str, Tree, Accessors, Txn, Cmd, Acc) ->
+lookup(Str, Tree, Txn, Cmd, Acc) ->
     case next_element(Str) of
         {[],_} ->
             {error, "Unknown no token"};
         {PathPart, []} ->
-            case lookup_by_name(PathPart, Tree, Accessors) of
+            case lookup_by_name(PathPart, Tree) of
                 {ok, Item} ->
                     return(Cmd, [Item|Acc], "");
                 {error, _} = Err ->
                    Err
             end;
         {PathPart, Tail} ->
-            case lookup_by_name(PathPart, Tree, Accessors) of
-                {ok, Item} ->
-                    NodeType = cli_util:get_node_type(Accessors, Item),
+            case lookup_by_name(PathPart, Tree) of
+                {ok, #{node_type := NodeType} = Item} ->
                     case NodeType of
                         _ when NodeType == leaf orelse NodeType == leaf_list ->
                             return(Cmd, [Item|Acc], Tail);
@@ -53,40 +52,27 @@ lookup(Str, Tree, Accessors, Txn, Cmd, Acc) ->
                             %% be put in the path. List schema items
                             %% are required to have list_keys and
                             %% list_values entries, which we can use
-                            KeyNames = cli_util:get_list_key_names(Accessors,
-                                                                   Item),
+                            #{key_names := KeyNames} = Item,
                             ?DBG("KEY NAMES ~p~n",[KeyNames]),
                             %% The length of KeyNames tells us how
                             %% many command parts to fetch to make up
                             %% the list key
                             {KeyValues, T} = parse_list_keys(Tail, length(KeyNames)),
-                            ListItem = cli_util:set_list_key_values(Accessors, Item, KeyValues),
-                            ChildSpec = cli_util:get_children(Accessors, ListItem, Txn),
-                            {Children, NewAccessors, _AddingListItem} =
-                                case cli_util:eval_childspec(ChildSpec) of
-                                    {Cs, Gs, AddingListItem1} ->
-                                        {Cs, Gs, AddingListItem1};
-                                    Cs ->
-                                        {Cs, Accessors, false}
-                                end,
+                            ListItem = Item#{key_values := KeyValues},
+                            #{children := ChildSpec} = ListItem,
+                            Children = cli_util:expand_children(ChildSpec),
                             if Cmd == undefined ->
-                                    lookup(T, Children, NewAccessors, Txn, [ListItem], Acc);
+                                    lookup(T, Children, Txn, [ListItem], Acc);
                                true ->
-                                    lookup(T, Children, NewAccessors, Txn, Cmd, [ListItem|Acc])
+                                    lookup(T, Children, Txn, Cmd, [ListItem|Acc])
                             end;
                         _ ->
-                            ChildSpec = cli_util:get_children(Accessors, Item, Txn),
-                            {Children, NewAccessors, _AddingListItem} =
-                                case cli_util:eval_childspec(ChildSpec) of
-                                    {Cs, Gs, AddingListItem1} ->
-                                        {Cs, Gs, AddingListItem1};
-                                    Cs ->
-                                        {Cs, Accessors, false}
-                                end,
+                            #{children := ChildSpec} = Item,
+                            Children = cli_util:expand_children(ChildSpec),
                             if Cmd == undefined ->
-                                    lookup(Tail, Children, NewAccessors, Txn, [Item], Acc);
+                                    lookup(Tail, Children, Txn, [Item], Acc);
                                true ->
-                                    lookup(Tail, Children, NewAccessors, Txn, Cmd, [Item|Acc])
+                                    lookup(Tail, Children, Txn, Cmd, [Item|Acc])
                             end
                     end;
                 {error, _} = Err ->
@@ -106,14 +92,11 @@ parse_list_keys(Str, N, Acc) ->
     parse_list_keys(Tail, N-1, [Next|Acc]).
 
 
-lookup_by_name(Name, [TreeItem|Tree], Accessors) ->
-    case cli_util:get_name(Accessors, TreeItem) of
-        Name ->
-            {ok, TreeItem};
-        _ ->
-            lookup_by_name(Name, Tree, Accessors)
-    end;
-lookup_by_name(_, [], _) ->
+lookup_by_name(Name, [#{name := Name} = TreeItem |_]) ->
+    {ok, TreeItem};
+lookup_by_name(Name, [_ | Tree]) ->
+    lookup_by_name(Name, Tree);
+lookup_by_name(_, []) ->
     {error, "No such command"}.
 
 return(Cmd, Items, Tail) ->

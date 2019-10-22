@@ -12,7 +12,7 @@
 
 -include("debug.hrl").
 
--export([expand/3, expand/4]).
+-export([expand/2, expand/3]).
 
 %%--------------------------------------------------------------------
 %% @doc expand a string based on a provided tree of nodes and the
@@ -23,12 +23,12 @@
 %% the user input, and Menu is a list of nodes to be presented to the
 %% user as a menu of possible next items.
 -spec expand(string(), list(), list()) -> {yes, string(), list()} | no.
-expand(Str, Tree, Getters) ->
-    expand(Str, Tree, Getters, undefined).
+expand(Str, Tree) ->
+    expand(Str, Tree, undefined).
 
-expand(Str, Tree, Getters, Txn) ->
+expand(Str, Tree, Txn) ->
     Stripped = cli_util:strip_ws(Str),
-    expand(Stripped, Tree, [], Getters, false, Txn).
+    expand(Stripped, Tree, [], Txn, undefined).
 
 
 %% Expand a string according to a generic tree.
@@ -37,17 +37,15 @@ expand(Str, Tree, Getters, Txn) ->
 %%
 %% MenuItems here is always the current set of nodes we are trying to
 %% match against
-expand([], MenuItems, MatchedStr, Gs, AddListItems, Txn) ->
+expand([], MenuItems, MatchedStr, Txn, CmdType) ->
     ?DBG("expand end no space ~p~n",[length(MenuItems)]),
     %% The end of the input but no space.
     case MenuItems of
         [] ->
             %% Nothing matching
             no;
-        [Item] ->
-            Name = cli_util:get_name(Gs, Item),
-            NodeType = cli_util:get_node_type(Gs, Item),
-            if NodeType == new_list_item andalso AddListItems == true ->
+        [#{name := Name, node_type := NodeType} = Item] ->
+            if NodeType == new_list_item andalso CmdType == set ->
                     %% Adding the first new list item. If the user has
                     %% typed some characters towards the list item add
                     %% the space to allow them to move on
@@ -56,9 +54,8 @@ expand([], MenuItems, MatchedStr, Gs, AddListItems, Txn) ->
                     %% And it has all the characters of that
                     %% node. Insert the space on behalf of the user
                     %% and grab the children to show as a menu.
-                    {Children, NewGs, NewAddListItems} =
-                        menu_item_children(Item, Txn, Gs, AddListItems),
-                    Menu = cli:format_menu(Children, NewGs),
+                    Children = menu_item_children(Item, Txn, CmdType),
+                    Menu = cli:format_menu(Children),
                     {yes, " ", Menu};
                true ->
                     %% The user didn't type all the characters, but it
@@ -73,42 +70,38 @@ expand([], MenuItems, MatchedStr, Gs, AddListItems, Txn) ->
         MenuItems ->
             %% Still a number of matching menu items. auto fill up to
             %% the point they diverge
-            Chars = expand_menus(MatchedStr, MenuItems, Gs),
-            Menu = cli:format_menu(MenuItems, Gs),
+            Chars = expand_menus(MatchedStr, MenuItems),
+            Menu = cli:format_menu(MenuItems),
             {yes, Chars, Menu}
     end;
-expand([$\s], [], _, _, _, _) ->
+expand([$\s], [], _, _, _) ->
     %% End of input after a space, but no matchable children
     no;
-expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
+expand([$\s], Items, MatchedChars, CmdType, Txn) ->
     ?DBG("expand space at end Items = ~p Matched = ~p~n",[length(Items), MatchedChars]),
     ?DBG("Items ~p~n",[Items]),
     %% Its the end of the input after a space, we want to show menus
     case Items of
-        [Item] ->
+        [#{name := Name, node_type := NodeType} = Item] ->
             %% There's only one
-            Name = cli_util:get_name(Gs, Item),
-            NodeType = cli_util:get_node_type(Gs, Item),
-            if NodeType == new_list_item andalso AddListItems == true ->
+            if NodeType == new_list_item andalso CmdType == set ->
                     %% Adding the first new list item
                     %% ?DBG("NEW LIST ITEM ~p~n", [Item]),
-                    {Children, NewGs, NewAddListItems} =
-                        menu_item_children(Item, Txn, Gs, AddListItems),
-                    Menu = cli:format_menu(Children, NewGs),
+                    Children = menu_item_children(Item, Txn, CmdType),
+                    Menu = cli:format_menu(Children),
                     {yes, "", Menu};
                Name == MatchedChars ->
                     %% The current node is the one, show its children
                     %% in a menu
-                    {Children, NewGs, NewAddListItems} =
-                        menu_item_children(Item, Txn, Gs, AddListItems),
-                    %% ?DBG("cli_expand: after spc children = ~p~n",[Children]),
+                    Cmd = cmd_type(CmdType, Item),
+                    Children = menu_item_children(Item, Txn, Cmd),
+                    ?DBG("cli_expand: after spc children = ~p~n",[Children]),
                     case Children of
-                        [One] when NodeType /= list ->
+                        [#{name := OneName}] when NodeType /= list ->
                             %% Only one - just fill it in for the user
-                            OneName = cli_util:get_name(NewGs, One),
                             {yes, OneName ++ " ", ""};
                         _ ->
-                            Menu = cli:format_menu(Children, NewGs),
+                            Menu = cli:format_menu(Children),
                             {yes, "", Menu}
                     end;
                true ->
@@ -121,80 +114,78 @@ expand([$\s], Items, MatchedChars, Gs, AddListItems, Txn) ->
                     %% again to see the menu.
                     {yes, chars_to_expand(MatchedChars, Name), []}
             end;
-        [Item|_] ->
-            NodeType = cli_util:get_node_type(Gs, Item),
-            if NodeType == new_list_item andalso AddListItems == true ->
+        [#{node_type := NodeType} = Item|_] ->
+            if NodeType == new_list_item andalso CmdType == set ->
                     %% This is the first list item
-                    {Children, NewGs, NewAddListItems} =
-                        menu_item_children(Item, Txn, Gs, AddListItems),
-                    ?DBG("Children new list = ~p of item ~p~n",[Children, Item]),
-                    Menu = cli:format_menu(Children, NewGs),
+                    Children = menu_item_children(Item, Txn, CmdType),
+                    ?DBG("Children new list ~p of item ~p~n",[Children, Item]),
+                    Menu = cli:format_menu(Children),
                     {yes, "", Menu};
                true ->
                     %% Still a number of matching menu items. auto fill up to
                     %% the point they diverge
-                    Chars = expand_menus(MatchedChars, Items, Gs),
-                    Menu = cli:format_menu(Items, Gs),
+                    Chars = expand_menus(MatchedChars, Items),
+                    Menu = cli:format_menu(Items),
                     {yes, Chars, Menu}
             end
     end;
-expand([$\s|Cs], [Item], MatchedChars, Gs, AddListItems, Txn) ->
+expand([$\s|Cs], [#{name := Node, node_type := NodeType} = Item], MatchedChars, CmdType, Txn) ->
     ?DBG("expand space ~p matched = ~p~n",[1, MatchedChars]),
     ?DBG("expand space Item ~p~n",[Item]),
-    Node = cli_util:get_name(Gs, Item),
-    NodeType = cli_util:get_node_type(Gs, Item),
     case MatchedChars of
         Node ->
             %% Matched a full single level in the command tree with a
             %% following space. Carry on to children
             %% ?DBG("expand matched full level ~p~p~n",[Node,Item]),
-            {Children, NewGs, NewAddListItems} =
-                menu_item_children(Item, Txn, Gs, AddListItems),
+            Cmd = cmd_type(CmdType, Item),
+            Children = menu_item_children(Item, Txn, Cmd),
             ?DBG("expand space Childrten ~p~n",[Children]),
-            expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
-        _ when NodeType == new_list_item andalso AddListItems == true ->
+            expand(Cs, Children, [], Cmd, Txn);
+        _ when NodeType == new_list_item andalso CmdType == set ->
             %% we got a list key, carry on down the tree
-            {Children, NewGs, NewAddListItems} =
-                menu_item_children(Item, Txn, Gs, AddListItems),
+            Children = menu_item_children(Item, Txn, CmdType),
             ?DBG("expand space Childrten ~p~n",[Children]),
-            expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
+            expand(Cs, Children, [], CmdType, Txn);
         _ ->
             no
     end;
-expand([$\s|Cs], [Item | _] = MenuItems, MatchedChars, Gs, AddListItems, Txn) ->
-    NodeType = cli_util:get_node_type(Gs, Item),
-    if  NodeType == new_list_item andalso AddListItems == true ->
+expand([$\s|Cs], [#{node_type := NodeType} = Item | _] = MenuItems, MatchedChars, CmdType, Txn) ->
+    if  NodeType == new_list_item andalso CmdType == set ->
             %% Reached a space in the middle. If we are adding a list
             %% item use it and move on
-            {Children, NewGs, NewAddListItems} =
-                menu_item_children(Item, Txn, Gs, AddListItems),
-            expand(Cs, Children, [], NewGs, NewAddListItems, Txn);
+            Children = menu_item_children(Item, Txn, CmdType),
+            expand(Cs, Children, [], CmdType, Txn);
         true ->
             no
     end;
-expand([C|Cs], MenuItems, Matched, Gs, AddListItems, Txn) ->
+expand([C|Cs], MenuItems, Matched, CmdType, Txn) ->
     %% ?DBG("expand normal chars ~p matched = ~p~n",[C, Matched]),
     SoFar = Matched ++ [C],
-    Matches = match_cmds(SoFar, MenuItems, Gs),
+    Matches = match_cmds(SoFar, MenuItems),
     case Matches of
         [] ->
             %% But we could be adding a new list item, so would not have matches
-            [Item|_] = MenuItems,
-            NodeType = cli_util:get_node_type(Gs, Item),
-            if NodeType == new_list_item andalso AddListItems == true ->
-                    expand(Cs, MenuItems, SoFar, Gs, AddListItems, Txn);
+            [#{node_type := NodeType} = Item|_] = MenuItems,
+            if NodeType == new_list_item andalso CmdType == set ->
+                    expand(Cs, MenuItems, SoFar, CmdType, Txn);
                true ->
                     no
             end;
         Items ->
-            expand(Cs, Items, SoFar, Gs, AddListItems, Txn)
+            expand(Cs, Items, SoFar, CmdType, Txn)
     end.
 
-match_cmds(_Str, [], _) ->
+cmd_type(undefined, #{name := "set"}) ->
+    set;
+cmd_type(undefined, #{}) ->
+    show;
+cmd_type(Type, _) ->
+    Type.
+
+match_cmds(_Str, []) ->
     [];
-match_cmds(Str, Menu, Gs) ->
-    lists:filter(fun(Item) ->
-                         Name = cli_util:get_name(Gs, Item),
+match_cmds(Str, Menu) ->
+    lists:filter(fun(#{name := Name}) ->
                          lists:prefix(Str, Name)
                  end, Menu).
 
@@ -214,25 +205,15 @@ chars_to_expand(Str, Match) ->
 %% add a new list item. list items with multiple keys need to handle
 %% each key in sequence. Once we have all list keys children become
 %% the items inside the list item, minus the list key names.
-menu_item_children(Item, Txn, Gs, AddListItems) ->
-    Cs = cli_util:get_children(Gs, Item, Txn, AddListItems),
-    case cli_util:eval_childspec(Cs, Txn) of
-        {Children, Getters} ->
-            {Children, Getters, AddListItems};
-        {Children, Getters, NewAddListItems} ->
-            {Children, Getters, NewAddListItems};
-        Children ->
-            {Children, Gs, AddListItems}
-    end.
-
+menu_item_children(Item, Txn, CmdType) ->
+     cli_util:children(Item, Txn, CmdType).
 
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"
-expand_menus(Str, Menus, Gs) ->
-    ?DBG("cli_expand:expand_menus ~p~n ~p~n ~p ~n",[Str, Menus, Gs]),
+expand_menus(Str, Menus) ->
+    ?DBG("cli_expand:expand_menus ~p~n ~p ~n",[Str, Menus]),
     StrLen = length(Str),
-    Suffixes = lists:map(fun(Item) ->
-                                 Name = cli_util:get_name(Gs, Item),
+    Suffixes = lists:map(fun(#{name := Name}) ->
                                  lists:nthtail(StrLen, Name)
                          end, Menus),
     %% ?DBG("expand_menus ML = ~p~n",[Suffixes]),
@@ -250,7 +231,7 @@ longest_common_prefix(Strings, Result) ->
         true ->
             lists:reverse(Result);
         false ->
-            case identical(Prefixes) of
+            case identical_prefixes(Prefixes) of
                 true ->
                     longest_common_prefix(Tails, [hd(Prefixes) | Result]);
                 false ->
@@ -258,13 +239,13 @@ longest_common_prefix(Strings, Result) ->
             end
     end.
 
-identical([A,A|As]) ->
-    identical([A|As]);
-identical([_,_|_]) ->
+identical_prefixes([A,A|As]) ->
+    identical_prefixes([A|As]);
+identical_prefixes([_,_|_]) ->
     false;
-identical([_]) ->
+identical_prefixes([_]) ->
     true;
-identical([]) ->
+identical_prefixes([]) ->
     true.
 
 

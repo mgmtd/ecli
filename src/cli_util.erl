@@ -9,70 +9,101 @@
 -module(cli_util).
 
 -include("cli.hrl").
+-include("debug.hrl").
 
--export([get_name/2, get_description/2,
-         get_children/3, get_children/4, get_action/2,
-         get_node_type/2,
-         get_list_key_names/2, get_list_key_values/2,
-         set_list_key_values/3
-        ]).
-
--export([eval_childspec/1, eval_childspec/2]).
+-export([children/3, expand_children/1]).
 
 -export([strip_ws/1]).
 
-%% @doc Utility functions for getting the actual value of a node in a
-%% tree item given the getter function and the item itself.
-%% @end
-get_name(#accessors{name_fun = Fn}, Item) -> Fn(Item).
-
-get_description(#accessors{desc_fun = Fn}, Item) -> Fn(Item).
-
-get_children(#accessors{children_fun = Fn}, Item, Txn) ->
-    %% io:format("cli_util children ~p~n", [erlang:fun_info(Fn)]),
-    case erlang:fun_info(Fn, arity) of
-        {arity, 1} -> Fn(Item);
-        {arity, 2} -> Fn(Item, Txn);
-        {arity, 3} -> Fn(Item, Txn, false)
-    end.
-
-get_children(#accessors{children_fun = Fn}, Item, Txn, AddListItems) ->
-    %% io:format("cli_util children ~p~n", [erlang:fun_info(Fn)]),
-    case erlang:fun_info(Fn, arity) of
-        {arity, 1} -> Fn(Item);
-        {arity, 2} -> Fn(Item, Txn);
-        {arity, 3} -> Fn(Item, Txn, AddListItems)
-    end.
-
-
-get_node_type(#accessors{node_type_fun = Fn}, Item) -> Fn(Item).
-
-get_list_key_names(#accessors{list_key_names_fun = Fn}, Item) -> Fn(Item).
-
-get_list_key_values(#accessors{list_key_values_fun = Fn}, Item) -> Fn(Item).
-
-set_list_key_values(#accessors{set_list_key_values_fun = Fn}, Item, Value) ->
-    Fn(Item, Value).
-
-get_action(#accessors{action_fun = Fn}, Item) -> Fn(Item).
 
 %% Get the actual children from a tree item
-
-eval_childspec(S) ->
-    eval_childspec(S, undefined).
-
-eval_childspec(#cli_sequence{seq = [Seq|_]}, Txn) ->
-    eval_childspec(Seq, Txn);
-eval_childspec(#cli_tree{tree_fun = Fun, accessors = Accessors,
-                         add_list_items = ALI}, Txn) ->
-    {Fun(Txn), Accessors, ALI};
-eval_childspec(F, Arg) when is_function(F) ->
-    case erlang:fun_info(F, arity) of
-        {arity, 0} -> F();
-        {arity, 1} -> F(Arg)
+children(#{node_type := container, name := Name, children := Cs} = Item,
+         Txn, _CmdType) ->
+    ?DBG("container children~p~n", [Cs]),
+    Children = expand_children(Cs),
+    ?DBG("container expanded children~p~n", [Children]),
+    case Item of
+        #{path := Path} ->
+            insert_full_path(Children, Path ++ [Name]);
+        _ ->
+            insert_full_path(Children, [Name])
     end;
-eval_childspec(L, _Arg) when is_list(L) -> L;
-eval_childspec(_, _) -> [].
+children(#{node_type := List, path := Path, name := Name, children := Cs,
+           key_names := KeyNames, key_values := KeyValues} = S,
+         Txn, CmdType) when List == list orelse
+                            List == new_list_item ->
+    %% Children for list items are the list keys plus maybe a wildcard
+    %% if it's a set command and we want to allow adding a new list
+    %% item (indicated by AddListItems = true).
+
+    %% If it has a compound key which one depends on how far we got in
+    %% gathering the list keys. We can abuse the key_values field to
+    %% track how many list keys we have, and re-use the same
+    %% #cfg_schema{} list item for all the list item "children" so we
+    %% still have it around for the real children.
+    KeysSoFar = length(KeyValues),
+    KeysNeeded = length(KeyNames),
+    if KeysSoFar == KeysNeeded ->
+            ?DBG("all keys needed~n"),
+            %% Now we have all the keys return the real child list.
+            %% FIXME - remove the list keys from this list
+            Children = expand_children(Cs),
+            Filtered = filter_list_key_leafs(Children, KeyNames),
+            insert_full_path(Filtered, Path ++ [Name]);
+       true ->
+            %% First time: Needed = 2, SoFar == 0, element = 1
+            %% 2nd time:   Needed = 2, SoFar = 1, element = 2
+            %% Last time:  Needed = 2, SoFar = 2
+            NextKey = lists:nth(KeysSoFar + 1, KeyNames),
+            Keys = [NextKey | KeyValues],
+            ?DBG("more keys needed ~p ~p~n", [NextKey, KeyValues]),
+
+            Template = S#{key_values => Keys},
+            ListKeys = cfg_txn:list_keys(Txn, Path ++ [Name]),
+            %% This is all the keys. We need to only show the current
+            %% level, only unique values, and only items where the
+            %% previous key parts match
+            ?DBG("ListKeys ~p ~p~n", [Path ++ [Name], ListKeys]),
+            %%
+            %% We don't have all this: the path isn't filled in, and
+            %% we don't have the previous key values
+            %% FIXME: Fill the path in
+            %% FIXME: include previous key parts somewhere
+
+            KeysItems = lists:map(
+                          fun(K) ->
+                                  KName = element(KeysSoFar + 1, K),
+                                  Template#{name => KName}
+                          end, ListKeys),
+
+            %% The goal here is to return the set of possible values
+            %% at this point, plus something that will prompt for a
+            %% new list item. We need to just convince the menu thingy
+            %% we are a normal list of children, and we need to keep
+            %% enough blah around so we can carry on afterwards
+            case CmdType of
+                set ->
+                    [Template#{node_type => new_list_item} | KeysItems];
+                _ ->
+                    KeysItems
+            end
+    end;
+children(_, _, _) ->
+    [].
+
+expand_children(F) when is_function(F) -> F();
+expand_children(L) when is_list(L) -> L;
+expand_children(_) -> [].
+
+insert_full_path(Children, Path) ->
+    lists:map(fun(S) ->
+                      S#{path => Path}
+              end, Children).
+
+filter_list_key_leafs(Children, KeyNames) ->
+    lists:filter(fun(#{name := Name}) ->
+                         not lists:member(Name, KeyNames)
+                 end, Children).
 
 %% @doc strip spaces and tabs from the start of a listy string.
 -spec strip_ws(string()) -> string().
