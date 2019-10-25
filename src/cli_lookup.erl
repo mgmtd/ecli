@@ -26,7 +26,7 @@
 %% string following the final schema node if any.
 
 lookup(Str, Tree, Txn) ->
-    %% ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
+    ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
     lookup(Str, Tree, Txn, undefined, []).
 
 lookup(Str, Tree, Txn, Cmd, Acc) ->
@@ -59,16 +59,14 @@ lookup(Str, Tree, Txn, Cmd, Acc) ->
                             %% the list key
                             {KeyValues, T} = parse_list_keys(Tail, length(KeyNames)),
                             ListItem = Item#{key_values := KeyValues},
-                            #{children := ChildSpec} = ListItem,
-                            Children = cli_util:expand_children(ChildSpec),
+                            Children = cli_util:children(ListItem, Txn, Cmd),
                             if Cmd == undefined ->
                                     lookup(T, Children, Txn, [ListItem], Acc);
                                true ->
                                     lookup(T, Children, Txn, Cmd, [ListItem|Acc])
                             end;
                         _ ->
-                            #{children := ChildSpec} = Item,
-                            Children = cli_util:expand_children(ChildSpec),
+                            Children = cli_util:children(Item, Txn, Cmd),
                             if Cmd == undefined ->
                                     lookup(Tail, Children, Txn, [Item], Acc);
                                true ->

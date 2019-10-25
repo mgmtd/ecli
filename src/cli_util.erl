@@ -11,31 +11,31 @@
 -include("cli.hrl").
 -include("debug.hrl").
 
--export([children/3, expand_children/1]).
+-export([children/3, expand_children/2]).
 
 -export([strip_ws/1]).
 
 
 %% Get the actual children from a tree item
+
 children(#{node_type := container, name := Name, children := Cs} = Item,
          Txn, _CmdType) ->
     ?DBG("container children~p~n", [Cs]),
-    Children = expand_children(Cs),
-    ?DBG("container expanded children~p~n", [Children]),
-    case Item of
-        #{path := Path} ->
-            insert_full_path(Children, Path ++ [Name]);
-        _ ->
-            insert_full_path(Children, [Name])
-    end;
+    Path = maps:get(path, Item, []),
+    FullPath = Path ++ [Name],
+    ?DBG("container items_path~p~n", [{Path, Item}]),
+    ItemsPath = items_path(Path, Item),
+    ?DBG("container items_path res~p~n", [ItemsPath]),
+    Children = expand_children(Cs, ItemsPath),
+    ?DBG("container expanded path ~p children~p~n", [FullPath, Children]),
+    insert_full_path(Children, ItemsPath);
 children(#{node_type := List, path := Path, name := Name, children := Cs,
            key_names := KeyNames, key_values := KeyValues} = S,
          Txn, CmdType) when List == list orelse
                             List == new_list_item ->
     %% Children for list items are the list keys plus maybe a wildcard
     %% if it's a set command and we want to allow adding a new list
-    %% item (indicated by AddListItems = true).
-
+    %% item (indicated by CmdType = set).
     %% If it has a compound key which one depends on how far we got in
     %% gathering the list keys. We can abuse the key_values field to
     %% track how many list keys we have, and re-use the same
@@ -45,9 +45,10 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
     KeysNeeded = length(KeyNames),
     if KeysSoFar == KeysNeeded ->
             ?DBG("all keys needed~n"),
-            %% Now we have all the keys return the real child list.
+            %% Now we have all the keys return the child nodes of the list.
             %% FIXME - remove the list keys from this list
-            Children = expand_children(Cs),
+            FullPath = Path ++ [Name],
+            Children = expand_children(Cs, FullPath),
             Filtered = filter_list_key_leafs(Children, KeyNames),
             insert_full_path(Filtered, Path ++ [Name]);
        true ->
@@ -60,7 +61,7 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
 
             Template = S#{key_values => Keys},
             ListKeys = cfg_txn:list_keys(Txn, Path ++ [Name]),
-            %% This is all the keys. We need to only show the current
+            %% This is not yet all the keys. We need to only pick the current
             %% level, only unique values, and only items where the
             %% previous key parts match
             ?DBG("ListKeys ~p ~p~n", [Path ++ [Name], ListKeys]),
@@ -91,9 +92,19 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
 children(_, _, _) ->
     [].
 
-expand_children(F) when is_function(F) -> F();
-expand_children(L) when is_list(L) -> L;
-expand_children(_) -> [].
+expand_children(F, Path) when is_function(F) ->
+    case erlang:fun_info(F, arity) of
+        {arity, 0} -> F();
+        {arity, 1} -> F(Path)
+    end;
+expand_children(L, _) when is_list(L) -> L;
+expand_children(_, _) -> [].
+
+%% Append Item to path once we are past the command part of the string
+items_path(Path, #{rec_type := cmd}) ->
+    Path;
+items_path(Path, #{name := Name}) ->
+    Path ++ [Name].
 
 insert_full_path(Children, Path) ->
     lists:map(fun(S) ->
