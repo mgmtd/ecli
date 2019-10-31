@@ -45,8 +45,8 @@ expand([], MenuItems, MatchedStr, Txn, CmdType) ->
             %% Nothing matching
             no;
         [#{name := Name, node_type := NodeType} = Item] ->
-            if NodeType == new_list_item andalso CmdType == set ->
-                    %% Adding the first new list item. If the user has
+            if NodeType == new_list_item ->
+                    %% Adding a new list item. If the user has
                     %% typed some characters towards the list item add
                     %% the space to allow them to move on
                     {yes, " ", []};
@@ -67,6 +67,9 @@ expand([], MenuItems, MatchedStr, Txn, CmdType) ->
                     %% again to see the menu.
                     {yes, chars_to_expand(MatchedStr, Name), []}
             end;
+        [#{node_type := new_list_item} | _] ->
+            %% Adding a new list item when there are exsiting items
+            {yes, " ", []};
         MenuItems ->
             %% Still a number of matching menu items. auto fill up to
             %% the point they diverge
@@ -84,10 +87,12 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
     case Items of
         [#{name := Name, node_type := NodeType} = Item] ->
             %% There's only one
-            if NodeType == new_list_item andalso CmdType == set ->
+            if NodeType == new_list_item; NodeType == list_key ->
                     %% Adding the first new list item
-                    %% ?DBG("NEW LIST ITEM ~p~n", [Item]),
-                    Children = menu_item_children(Item, Txn, CmdType),
+                    ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+                    #{key_values := KVs} = Item,
+                    Item1 = Item#{key_values => KVs ++ [MatchedChars]},
+                    Children = menu_item_children(Item1, Txn, CmdType),
                     Menu = cli:format_menu(Children),
                     {yes, "", Menu};
                Name == MatchedChars ->
@@ -115,10 +120,13 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
                     {yes, chars_to_expand(MatchedChars, Name), []}
             end;
         [#{node_type := NodeType} = Item|_] ->
-            if NodeType == new_list_item andalso CmdType == set ->
-                    %% This is the first list item
-                    Children = menu_item_children(Item, Txn, CmdType),
-                    ?DBG("Children new list ~p of item ~p~n",[Children, Item]),
+            if NodeType == new_list_item ->
+                    %% This is a new list item
+                    #{key_values := KVs} = Item,
+                    ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+                    Item1 = Item#{key_values => KVs ++ [MatchedChars]},
+                    Children = menu_item_children(Item1, Txn, CmdType),
+                    ?DBG("Children new list ~p of item ~p~n",[Children, Item1]),
                     Menu = cli:format_menu(Children),
                     {yes, "", Menu};
                true ->
@@ -129,10 +137,29 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
                     {yes, Chars, Menu}
             end
     end;
+expand([$\s|Cs], [#{name := Node, node_type := new_list_item} = Item], MatchedChars, Txn, CmdType) ->
+    %% We got down to just the special new list item. It must be a new
+    %% entry in our list as any existing entries have been discared
+    %% already
+    #{key_values := KVs} = Item,
+    ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+    Item1 = Item#{key_values => KVs ++ [MatchedChars]},
+    Children = menu_item_children(Item1, Txn, CmdType),
+    ?DBG("expand new list space Childrten ~p~n",[Children]),
+    expand(Cs, Children, [], Txn, CmdType);
 expand([$\s|Cs], [#{name := Node, node_type := NodeType} = Item], MatchedChars, Txn, CmdType) ->
     ?DBG("expand space ~p matched = ~p~n",[1, MatchedChars]),
     ?DBG("expand space Item ~p~n",[Item]),
     case MatchedChars of
+        Node when NodeType == list_key ->
+            %% Matched an existing list item. Add it to the list keys
+            %% and carry on expanding
+            #{key_values := KVs} = Item,
+            ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+            Item1 = Item#{key_values => KVs ++ [MatchedChars]},
+            Children = menu_item_children(Item1, Txn, CmdType),
+            ?DBG("expand space Childrten ~p~n",[Children]),
+            expand(Cs, Children, [], Txn, CmdType);
         Node ->
             %% Matched a full single level in the command tree with a
             %% following space. Carry on to children
@@ -141,36 +168,40 @@ expand([$\s|Cs], [#{name := Node, node_type := NodeType} = Item], MatchedChars, 
             Children = menu_item_children(Item, Txn, Cmd),
             ?DBG("expand space Childrten ~p~n",[Children]),
             expand(Cs, Children, [], Txn, Cmd);
-        _ when NodeType == new_list_item andalso CmdType == set ->
-            %% we got a list key, carry on down the tree
-            Children = menu_item_children(Item, Txn, CmdType),
-            ?DBG("expand space Childrten ~p~n",[Children]),
-            expand(Cs, Children, [], Txn, CmdType);
         _ ->
             no
     end;
 expand([$\s|Cs], [#{node_type := NodeType} = Item | _] = MenuItems, MatchedChars, Txn, CmdType) ->
-    if  NodeType == new_list_item andalso CmdType == set ->
+    if  NodeType == new_list_item ->
             %% Reached a space in the middle. If we are adding a list
             %% item use it and move on
-            Children = menu_item_children(Item, Txn, CmdType),
+            #{key_values := KVs} = Item,
+            ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+            Item1 = Item#{key_values => KVs ++ [MatchedChars]},
+            Children = menu_item_children(Item1, Txn, CmdType),
             expand(Cs, Children, [], Txn, CmdType);
         true ->
             no
     end;
-expand([C|Cs], MenuItems, Matched, Txn, CmdType) ->
-    %% ?DBG("expand normal chars ~p matched = ~p~n",[C, Matched]),
+expand([C|Cs], [#{node_type := new_list_item} = NLI |Items] = MenuItems, Matched, Txn, CmdType) ->
+    %% When we are adding a new list item only try to expand against existing items, we want the special new_list_item entry to stay around
     SoFar = Matched ++ [C],
-    Matches = match_cmds(SoFar, MenuItems),
+    Matches = filter_by_prefix(SoFar, Items),
     case Matches of
         [] ->
-            %% But we could be adding a new list item, so would not have matches
-            [#{node_type := NodeType} = Item|_] = MenuItems,
-            if NodeType == new_list_item andalso CmdType == set ->
-                    expand(Cs, MenuItems, SoFar, Txn, CmdType);
-               true ->
-                    no
-            end;
+            expand(Cs, [NLI], SoFar, Txn, CmdType);
+        KeptItems ->
+            expand(Cs, KeptItems, SoFar, Txn, CmdType)
+    end;
+expand([C|Cs], MenuItems, Matched, Txn, CmdType) ->
+    ?DBG("expand normal chars ~p matched = ~p~n",[[C], Matched]),
+    ?DBG("expand normal chars Items ~p~n",[MenuItems]),
+    SoFar = Matched ++ [C],
+    Matches = filter_by_prefix(SoFar, MenuItems),
+    case Matches of
+        [] ->
+            ?DBG("expand normal chars no matches true ~n",[]),
+            no;
         Items ->
             expand(Cs, Items, SoFar, Txn, CmdType)
     end.
@@ -182,9 +213,9 @@ cmd_type(undefined, #{}) ->
 cmd_type(Type, _) ->
     Type.
 
-match_cmds(_Str, []) ->
+filter_by_prefix(_Str, []) ->
     [];
-match_cmds(Str, Menu) ->
+filter_by_prefix(Str, Menu) ->
     lists:filter(fun(#{name := Name}) ->
                          lists:prefix(Str, Name)
                  end, Menu).

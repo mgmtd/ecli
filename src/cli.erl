@@ -97,7 +97,7 @@ lookup(Str, Tree, Txn) ->
 format_menu([]) -> "";
 format_menu([#{node_type := NodeType}|_] = Items) ->
     case NodeType of
-        new_list_item ->
+        List when List == new_list_item; List == list_key  ->
             format_list_menu(Items);
         _ ->
             format_normal_menu(Items)
@@ -110,24 +110,28 @@ format_normal_menu(Items) ->
                      end, Items),
     ["\r\n", Menu].
 
-format_list_menu([#{key_names := KeyNames, key_values := KeyValues}|Items]) ->
+format_list_menu([#{key_names := KeyNames, key_values := KeyValues,
+                    node_type := new_list_item}|Items]) ->
     %% The first item is passed as a placeholder for a new list key
     %% which is needed if this is a set command.
     KeyName = next_list_key(KeyNames, KeyValues),
     NewItem = ["Add new entry\r\n  <", KeyName, ">\r\n"],
+    ["\r\n", NewItem, format_list_menu(Items)];
+
+format_list_menu([]) ->
+    [];
+format_list_menu(Items) ->
     Select = "Select from the existing entries\r\n",
     MaxCmdLen = max_cmd_len(Items),
-    Menu = lists:map(fun(#{name := Cmd, desc := Desc}) ->
-                             ["  ", pad(Cmd, MaxCmdLen + 1), "\r\n"]
+    Menu = lists:map(fun(#{name := Name, desc := Desc}) ->
+                             ["  ", pad(Name, MaxCmdLen + 1), "\r\n"]
                      end, Items),
-    ["\r\n", NewItem, Select, Menu].
+    ["\r\n", Select, Menu].
 
-next_list_key(_, [Key|_]) ->
-    Key;
-next_list_key([Name|Ns], [Name|Ks]) ->
-    next_list_key(Ns, Ks);
-next_list_key([], [Key|_]) ->
-    Key.
+next_list_key([Name | _], []) ->
+    Name;
+next_list_key([_Name|Ns], [_Key|Ks]) ->
+    next_list_key(Ns, Ks).
 
 
 max_cmd_len([]) ->
