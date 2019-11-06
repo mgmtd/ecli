@@ -20,20 +20,16 @@
 
 children(#{node_type := container, name := Name, children := Cs} = Item,
          Txn, _CmdType) ->
-    ?DBG("container children~p~n", [Cs]),
     Path = maps:get(path, Item, []),
     FullPath = Path ++ [Name],
-    ?DBG("container items_path~p~n", [{Path, Item}]),
     ItemsPath = items_path(Path, Item),
-    ?DBG("container items_path res~p~n", [ItemsPath]),
     Children = expand_children(Cs, ItemsPath),
-    ?DBG("container expanded path ~p children~p~n", [FullPath, Children]),
     insert_full_path(Children, ItemsPath);
 children(#{node_type := List, path := Path, name := Name, children := Cs,
            key_names := KeyNames, key_values := KeyValues} = Item,
          Txn, CmdType) when List == list orelse
                             List == new_list_item orelse List == list_key ->
-    ?DBG("list children at path ~p with name ~p key_names ~p key_values ~p~n", [Path, Name, KeyNames, KeyValues]),
+    %% ?DBG("list children at path ~p with name ~p key_names ~p key_values ~p~n", [Path, Name, KeyNames, KeyValues]),
     %% Children for list items are the list keys plus maybe a wildcard
     %% if it's a set command and we want to allow adding a new list
     %% item (indicated by CmdType = set).
@@ -45,7 +41,6 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
     KeysSoFar = length(KeyValues),
     KeysNeeded = length(KeyNames),
     if KeysSoFar == KeysNeeded ->
-            ?DBG("all keys needed~n"),
             %% Now we have all the keys return the child nodes of the list.
             %% FIXME - remove the list keys from this list
             FullPath = Path ++ [Name],
@@ -58,7 +53,7 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
             %% Last time:  Needed = 2, SoFar = 2
             NextKey = lists:nth(KeysSoFar + 1, KeyNames),
             Keys = [NextKey | KeyValues],
-            ?DBG("more keys needed ~p ~p ~p~n", [CmdType, NextKey, KeyValues]),
+            %% ?DBG("more keys needed ~p ~p ~p~n", [CmdType, NextKey, KeyValues]),
 
             ListKeyMatch = list_keys_match(KeysSoFar, KeysNeeded, KeyValues),
             ListItemPath = case KeysSoFar of
@@ -71,7 +66,7 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
             %% This is not yet all the keys. We need to only pick the current
             %% level, only unique values, and only items where the
             %% previous key parts match
-            ?DBG("ListKeys ~p ~p~n", [ListItemPath, ListKeys]),
+           %% ?DBG("ListKeys ~p ~p~n", [ListItemPath, ListKeys]),
             %%
             %% We don't have all this: the path isn't filled in, and
             %% we don't have the previous key values

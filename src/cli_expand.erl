@@ -38,7 +38,7 @@ expand(Str, Tree, Txn) ->
 %% MenuItems here is always the current set of nodes we are trying to
 %% match against
 expand([], MenuItems, MatchedStr, Txn, CmdType) ->
-    ?DBG("expand end no space ~p~n",[length(MenuItems)]),
+    %% ?DBG("expand end no space ~p~n",[length(MenuItems)]),
     %% The end of the input but no space.
     case MenuItems of
         [] ->
@@ -81,15 +81,15 @@ expand([$\s], [], _, _, _) ->
     %% End of input after a space, but no matchable children
     no;
 expand([$\s], Items, MatchedChars, Txn, CmdType) ->
-    ?DBG("expand space at end Items = ~p Matched = ~p~n",[length(Items), MatchedChars]),
-    ?DBG("Items ~p~n",[Items]),
+    %% ?DBG("expand space at end Items = ~p Matched = ~p~n",[length(Items), MatchedChars]),
+    %% ?DBG("Items ~p~n",[Items]),
     %% Its the end of the input after a space, we want to show menus
     case Items of
         [#{name := Name, node_type := NodeType} = Item] ->
             %% There's only one
             if NodeType == new_list_item; NodeType == list_key ->
                     %% Adding the first new list item
-                    ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+                    %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
                     #{key_values := KVs} = Item,
                     Item1 = Item#{key_values => KVs ++ [MatchedChars]},
                     Children = menu_item_children(Item1, Txn, CmdType),
@@ -100,7 +100,7 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
                     %% in a menu
                     Cmd = cmd_type(CmdType, Item),
                     Children = menu_item_children(Item, Txn, Cmd),
-                    ?DBG("cli_expand: after spc children = ~p~n",[Children]),
+                    %% ?DBG("cli_expand: after spc children = ~p~n",[Children]),
                     case Children of
                         [#{name := OneName}] when NodeType /= list ->
                             %% Only one - just fill it in for the user
@@ -123,10 +123,10 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
             if NodeType == new_list_item ->
                     %% This is a new list item
                     #{key_values := KVs} = Item,
-                    ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+                    %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
                     Item1 = Item#{key_values => KVs ++ [MatchedChars]},
                     Children = menu_item_children(Item1, Txn, CmdType),
-                    ?DBG("Children new list ~p of item ~p~n",[Children, Item1]),
+                    %% ?DBG("Children new list ~p of item ~p~n",[Children, Item1]),
                     Menu = cli:format_menu(Children),
                     {yes, "", Menu};
                true ->
@@ -142,23 +142,22 @@ expand([$\s|Cs], [#{name := Node, node_type := new_list_item} = Item], MatchedCh
     %% entry in our list as any existing entries have been discared
     %% already
     #{key_values := KVs} = Item,
-    ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
     Item1 = Item#{key_values => KVs ++ [MatchedChars]},
     Children = menu_item_children(Item1, Txn, CmdType),
-    ?DBG("expand new list space Childrten ~p~n",[Children]),
+    %% ?DBG("expand new list space Childrten ~p~n",[Children]),
     expand(Cs, Children, [], Txn, CmdType);
 expand([$\s|Cs], [#{name := Node, node_type := NodeType} = Item], MatchedChars, Txn, CmdType) ->
-    ?DBG("expand space ~p matched = ~p~n",[1, MatchedChars]),
-    ?DBG("expand space Item ~p~n",[Item]),
+    %% ?DBG("expand space ~p matched = ~p~n",[1, MatchedChars]),
+    %% ?DBG("expand space Item ~p~n",[Item]),
     case MatchedChars of
         Node when NodeType == list_key ->
             %% Matched an existing list item. Add it to the list keys
             %% and carry on expanding
             #{key_values := KVs} = Item,
-            ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+            %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
             Item1 = Item#{key_values => KVs ++ [MatchedChars]},
             Children = menu_item_children(Item1, Txn, CmdType),
-            ?DBG("expand space Childrten ~p~n",[Children]),
+            %% ?DBG("expand space Childrten ~p~n",[Children]),
             expand(Cs, Children, [], Txn, CmdType);
         Node ->
             %% Matched a full single level in the command tree with a
@@ -166,7 +165,7 @@ expand([$\s|Cs], [#{name := Node, node_type := NodeType} = Item], MatchedChars, 
             %% ?DBG("expand matched full level ~p~p~n",[Node,Item]),
             Cmd = cmd_type(CmdType, Item),
             Children = menu_item_children(Item, Txn, Cmd),
-            ?DBG("expand space Childrten ~p~n",[Children]),
+            %% ?DBG("expand space Childrten ~p~n",[Children]),
             expand(Cs, Children, [], Txn, Cmd);
         _ ->
             no
@@ -176,7 +175,7 @@ expand([$\s|Cs], [#{node_type := NodeType} = Item | _] = MenuItems, MatchedChars
             %% Reached a space in the middle. If we are adding a list
             %% item use it and move on
             #{key_values := KVs} = Item,
-            ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
+            %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
             Item1 = Item#{key_values => KVs ++ [MatchedChars]},
             Children = menu_item_children(Item1, Txn, CmdType),
             expand(Cs, Children, [], Txn, CmdType);
@@ -194,13 +193,13 @@ expand([C|Cs], [#{node_type := new_list_item} = NLI |Items] = MenuItems, Matched
             expand(Cs, KeptItems, SoFar, Txn, CmdType)
     end;
 expand([C|Cs], MenuItems, Matched, Txn, CmdType) ->
-    ?DBG("expand normal chars ~p matched = ~p~n",[[C], Matched]),
-    ?DBG("expand normal chars Items ~p~n",[MenuItems]),
+    %% ?DBG("expand normal chars ~p matched = ~p~n",[[C], Matched]),
+    %% ?DBG("expand normal chars Items ~p~n",[MenuItems]),
     SoFar = Matched ++ [C],
     Matches = filter_by_prefix(SoFar, MenuItems),
     case Matches of
         [] ->
-            ?DBG("expand normal chars no matches true ~n",[]),
+            %% ?DBG("expand normal chars no matches true ~n",[]),
             no;
         Items ->
             expand(Cs, Items, SoFar, Txn, CmdType)
@@ -242,7 +241,7 @@ menu_item_children(Item, Txn, CmdType) ->
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"
 expand_menus(Str, Menus) ->
-    ?DBG("cli_expand:expand_menus ~p~n ~p ~n",[Str, Menus]),
+    %% ?DBG("cli_expand:expand_menus ~p~n ~p ~n",[Str, Menus]),
     StrLen = length(Str),
     Suffixes = lists:map(fun(#{name := Name}) ->
                                  lists:nthtail(StrLen, Name)

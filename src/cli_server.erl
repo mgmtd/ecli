@@ -228,7 +228,7 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
                 end,
             get_chars_loop(Cs, State#state{edlin = Edlin, cli_state = CliState});
         {done, FullLine, Cs, Ops} ->
-            ?DBG("CMD: ~p~n",[FullLine]),
+            %% ?DBG("CMD: ~p~n",[FullLine]),
             {ok, Output, CliState} = CliMod:execute(FullLine, State#state.cli_state),
             ok = send_raw("\r\n", State),
             ok = send_raw(Output, State),
@@ -252,7 +252,7 @@ send_drv(Ops, Socket, Term0) ->
     Term.
 
 send_raw(Bytes, #state{socket = Socket}) ->
-    ?DBG("Sending raw ~p\r\n",[Bytes]),
+    %% ?DBG("Sending raw ~p\r\n",[Bytes]),
     ok = gen_tcp:send(Socket, Bytes).
 
 %% Assumes that arg is a string

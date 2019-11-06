@@ -26,7 +26,7 @@
 %% string following the final schema node if any.
 
 lookup(Str, Tree, Txn) ->
-    ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
+    %% ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
     lookup(Str, Tree, Txn, undefined, []).
 
 lookup(Str, Tree, Txn, Cmd, Acc) ->
@@ -53,7 +53,7 @@ lookup(Str, Tree, Txn, Cmd, Acc) ->
                             %% are required to have list_keys and
                             %% list_values entries, which we can use
                             #{key_names := KeyNames} = Item,
-                            ?DBG("KEY NAMES ~p~n",[KeyNames]),
+                            %% ?DBG("KEY NAMES ~p~n",[KeyNames]),
                             %% The length of KeyNames tells us how
                             %% many command parts to fetch to make up
                             %% the list key
