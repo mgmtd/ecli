@@ -70,57 +70,67 @@ execute(CmdStr, #cli_juniper{mode = configuration} = J) ->
 %% Menu definitions
 %%--------------------------------------------------------------------
 operational_menu() ->
-    [#{node_type => container,
-       node => "show",
+    [#{rec_type => cmd,
+       node_type => container,
+       name => "show",
        desc => "Show commands",
        action => fun(J, Item, _Value) ->
                          show_operational(J, Item)
                  end,
        children => fun() -> operational_show_menu() end
       },
-     #{node_type => leaf,
-       node => "configure",
+     #{rec_type => cmd,
+       node_type => leaf,
+       name => "configure",
        desc => "Enter configuration mode",
        action => fun(J, _, _) -> enter_config_mode(J) end
       },
-     #{node_type => leaf,
-       node => "colose",
+     #{rec_type => cmd,
+       node_type => leaf,
+       name => "colose",
        desc => "Close session",
        action => fun(J) -> enter_config_mode(J) end
       }
     ].
 
 operational_show_menu() ->
-    [#{node_type => leaf,
-       node => "status",
+    [#{rec_type => cmd,
+       node_type => leaf,
+       name => "status",
        desc => "Status summary",
        action => fun(J, Item, _) -> show_status(J, Item) end
       },
-     #{node_type => leaf,
-       node => "sockets",
+     #{rec_type => cmd,
+       node_type => leaf,
+       name => "sockets",
        desc => "Open sockets",
        action => fun(J, Item, _) -> show_status(J, Item) end
       },
-     #{node_type => leaf,
-       node => "interface",
+     #{rec_type => cmd,
+       node_type => leaf,
+       name => "interface",
        desc => "Interface status",
        action => fun(J, Item, _) -> show_interface_status(J, Item) end
       }
     ].
 
 configuration_menu() ->
-    [#{node_type => container,
-       node => "show",
+    [#{rec_type => cmd,
+       node_type => container,
+       name => "show",
        desc => "Show configuration",
-       children => fun() -> configuration_tree() end
+       children => fun() -> configuration_tree() end,
+       action => fun(J, Item, _) -> show_interface_status(J, Item) end
       },
-     #{node_type => container,
-       node => "set",
+     #{rec_type => cmd,
+       node_type => container,
+       name => "set",
        desc => "Set a configuration parameter",
        action => fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end
       },
-     #{node_type => leaf,
-       node => "exit",
+     #{rec_type => cmd,
+       node_type => leaf,
+       name => "exit",
        desc => "Exit configuration mode",
        action => fun(J, _, _) -> exit_config_mode(J) end
       }
@@ -160,11 +170,11 @@ cfg_set(_Txn, _Path, _Value) ->
 %% Given a string from the user and a tree of menu items match the
 %% command against the tree. Several outcomes:
 %%
-%% 1. The string matches the prefix of a single node - Fill the
+%% 1. The string matches all the way to some prefix of a single node - Fill the
 %%    remaining part of the menu item. With a space at the end if the
 %%    node is a container, not if it is a leaf
 %%
-%% 2. The string fully matches a single container - Prompt with the
+%% 2. The string fully matches the path to a single container - Prompt with the
 %%    next level of menu items
 %%
 %% 3. The String fully matches a single leaf - nothing to do
@@ -177,20 +187,20 @@ cfg_set(_Txn, _Path, _Value) ->
 match_menu_item(Str, Menu, J) ->
     %% io:format("match_menu_item ~p~n",[Str]),
     %% Use the library function provided in cli to take care of the expansion
-    case cli:expand(Str, Menu) of
+    case cli:expand(Str, Menu, J#cli_juniper.user_txn) of
         no ->
             {no, [], [], J};
         {yes, Extra, MenuItems} ->
             {yes, Extra, MenuItems, J}
     end.
 
-execute_menu_item(CmdStr, Menu, J) ->
-    case cli:lookup(CmdStr, Menu) of
+execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
+    case cli:lookup(CmdStr, Menu, Txn) of
         {error, Reason} ->
             {ok, Reason, J};
         {ok, Cmd, Path, Value} ->
-            ActionNode = tl(Cmd),
-            #{action := Action} = ActionNode,
+            io:format("Got item ~p~n",[{Cmd, Path, Value}]),
+            #{action := Action} = lists:last(Cmd),
             case catch Action(J, Path, Value) of
                 {'EXIT', Reason} ->
                     io:format("Executing configuration exit ~p~n",[Reason]),

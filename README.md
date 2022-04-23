@@ -3,7 +3,7 @@ cli
 
 An Erlang/OTP application providing an online command line interface.
 
-Provides a collection of parts designed to make it easy to build telecom
+Provides a collection of libraries designed to make it easy to build telecom
 style command line access to a system. Features:
 
 * Small C program 'cli' to access the command line via a unix domain socket
@@ -14,7 +14,7 @@ style command line access to a system. Features:
   Juniper style command line interface
 
 * Expansion assistant - library module to provide tab/spc completion
-  of trees of items that include a few key attributes (name, children,
+  of trees of items that include a few standardised attributes (name, children,
   node type, action).
 
 * Command parser - library module to parse a command line against a

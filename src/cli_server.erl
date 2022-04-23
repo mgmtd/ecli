@@ -122,10 +122,10 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false,
                                         cli_mod = CliMod} = State) ->
-    %% Initialise terminal with metadata from cli program
+    %% Initialise terminal with metadata received from the cli C program
     {ok, Term} = cli_term:new(Data),
 
-    %% Fetch any initial user defined state
+    %% Fetch the initial callback module state
     {ok, CliState} = CliMod:init(),
 
     %% Send user defined banner
@@ -144,11 +144,10 @@ handle_info({tcp, Socket, Data}, #state{got_meta = false,
                           edlin = Edlin, cli_state = CliState}};
 handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
     %% ?DBG("GOT ~p~n",[Data]),
-
-    %% We have one or more chars. Normal chars get appended to the
+    %% We received one or more chars. Normal chars get appended to the
     %% current line, ctrl chars affect the current line in various
     %% ways.
-    %%
+
     %% Convert Data from UTF-8 binary (FIXME - other charsets?)
     %% dealing with partial character boundaries
     Bin = case Buf of
