@@ -115,7 +115,7 @@ list_keys_match(SoFar, Needed, Keys) ->
     list_to_tuple(Pattern).
 
 %% Append Item to path once we are past the command part of the string
-items_path(Path, #{rec_type := cmd}) ->
+items_path(Path, #{role := cmd}) ->
     Path;
 items_path(Path, #{name := Name}) ->
     Path ++ [Name].

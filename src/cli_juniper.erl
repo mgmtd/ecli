@@ -70,7 +70,7 @@ execute(CmdStr, #cli_juniper{mode = configuration} = J) ->
 %% Menu definitions
 %%--------------------------------------------------------------------
 operational_menu() ->
-    [#{rec_type => cmd,
+    [#{role => cmd,
        node_type => container,
        name => "show",
        desc => "Show commands",
@@ -79,13 +79,13 @@ operational_menu() ->
                  end,
        children => fun() -> operational_show_menu() end
       },
-     #{rec_type => cmd,
+     #{role => cmd,
        node_type => leaf,
        name => "configure",
        desc => "Enter configuration mode",
        action => fun(J, _, _) -> enter_config_mode(J) end
       },
-     #{rec_type => cmd,
+     #{role => cmd,
        node_type => leaf,
        name => "colose",
        desc => "Close session",
@@ -94,19 +94,19 @@ operational_menu() ->
     ].
 
 operational_show_menu() ->
-    [#{rec_type => cmd,
+    [#{role => cmd,
        node_type => leaf,
        name => "status",
        desc => "Status summary",
        action => fun(J, Item, _) -> show_status(J, Item) end
       },
-     #{rec_type => cmd,
+     #{role => cmd,
        node_type => leaf,
        name => "sockets",
        desc => "Open sockets",
        action => fun(J, Item, _) -> show_status(J, Item) end
       },
-     #{rec_type => cmd,
+     #{role => cmd,
        node_type => leaf,
        name => "interface",
        desc => "Interface status",
@@ -115,20 +115,20 @@ operational_show_menu() ->
     ].
 
 configuration_menu() ->
-    [#{rec_type => cmd,
+    [#{role => cmd,
        node_type => container,
        name => "show",
        desc => "Show configuration",
        children => fun() -> configuration_tree() end,
        action => fun(J, Item, _) -> show_interface_status(J, Item) end
       },
-     #{rec_type => cmd,
+     #{role => cmd,
        node_type => container,
        name => "set",
        desc => "Set a configuration parameter",
        action => fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end
       },
-     #{rec_type => cmd,
+     #{role => cmd,
        node_type => leaf,
        name => "exit",
        desc => "Exit configuration mode",
