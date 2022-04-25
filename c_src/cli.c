@@ -2,6 +2,7 @@
  */
 
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <sys/un.h>
 #include <sys/ioctl.h>
 #include <ctype.h>
@@ -22,7 +23,7 @@
 
 struct termios orig_termios;
 
-void die(const char *s) {
+static void die(const char *s) {
   perror(s);
   exit(1);
 }
@@ -31,12 +32,12 @@ void die(const char *s) {
 Raw terminal handling taken from article on creating a simple editor:
 https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
 */
-void disableRawMode() {
+static void disableRawMode() {
   if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
     die("tcsetattr");
 }
 
-void enableRawMode() {
+static void enableRawMode() {
   if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) die("tcgetattr");
   atexit(disableRawMode);
 
@@ -53,7 +54,7 @@ void enableRawMode() {
 
 /* Unix domain socket client taken from
    https://stackoverflow.com/questions/3324619/unix-domain-socket-using-datagram-communication-between-one-server-process-and */
-int openUnixDomSocket() {
+static int openUnixDomSocket() {
   int sock_fd;
   char * server_filename = "/var/tmp/example.socket";
 
@@ -79,7 +80,7 @@ int openUnixDomSocket() {
 
 
 /* Append tgetstr result to buffer */
-char *getstr(char* buf, char *str, int len) {
+static char *getstr(char* buf, char *str, int len) {
   strncpy(buf, str, len);
   buf += len;
   strncpy(buf, ":", 1);
@@ -94,7 +95,7 @@ char *getstr(char* buf, char *str, int len) {
 }
 
 /* Append tgetflag result to buffer */
-char *getbool(char* buf, char *str, int len) {
+static char *getbool(char* buf, char *str, int len) {
   strncpy(buf, str, len);
   buf += len;
   strncpy(buf, ":", 1);
