@@ -6,9 +6,9 @@
 %%% @end
 %%% Created : 17 Sep 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_util).
+-module(ecli_util).
 
--include("cli.hrl").
+-include("ecli.hrl").
 -include("debug.hrl").
 
 -export([children/3, expand_children/2]).

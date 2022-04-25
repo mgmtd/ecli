@@ -8,7 +8,7 @@
 %%% @end
 %%% Created : 17 Sep 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_expand).
+-module(ecli_expand).
 
 -include("debug.hrl").
 
@@ -27,7 +27,7 @@ expand(Str, Tree) ->
     expand(Str, Tree, undefined).
 
 expand(Str, Tree, Txn) ->
-    Stripped = cli_util:strip_ws(Str),
+    Stripped = ecli_util:strip_ws(Str),
     expand(Stripped, Tree, [], Txn, undefined).
 
 
@@ -55,7 +55,7 @@ expand([], MenuItems, MatchedStr, Txn, CmdType) ->
                     %% node. Insert the space on behalf of the user
                     %% and grab the children to show as a menu.
                     Children = menu_item_children(Item, Txn, CmdType),
-                    Menu = cli:format_menu(Children),
+                    Menu = ecli:format_menu(Children),
                     {yes, " ", Menu};
                true ->
                     %% The user didn't type all the characters, but it
@@ -74,7 +74,7 @@ expand([], MenuItems, MatchedStr, Txn, CmdType) ->
             %% Still a number of matching menu items. auto fill up to
             %% the point they diverge
             Chars = expand_menus(MatchedStr, MenuItems),
-            Menu = cli:format_menu(MenuItems),
+            Menu = ecli:format_menu(MenuItems),
             {yes, Chars, Menu}
     end;
 expand([$\s], [], _, _, _) ->
@@ -93,20 +93,20 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
                     #{key_values := KVs} = Item,
                     Item1 = Item#{key_values => KVs ++ [MatchedChars]},
                     Children = menu_item_children(Item1, Txn, CmdType),
-                    Menu = cli:format_menu(Children),
+                    Menu = ecli:format_menu(Children),
                     {yes, "", Menu};
                Name == MatchedChars ->
                     %% The current node is the one, show its children
                     %% in a menu
                     Cmd = cmd_type(CmdType, Item),
                     Children = menu_item_children(Item, Txn, Cmd),
-                    %% ?DBG("cli_expand: after spc children = ~p~n",[Children]),
+                    %% ?DBG("ecli_expand: after spc children = ~p~n",[Children]),
                     case Children of
                         [#{name := OneName}] when NodeType /= list ->
                             %% Only one - just fill it in for the user
                             {yes, OneName ++ " ", ""};
                         _ ->
-                            Menu = cli:format_menu(Children),
+                            Menu = ecli:format_menu(Children),
                             {yes, "", Menu}
                     end;
                true ->
@@ -127,13 +127,13 @@ expand([$\s], Items, MatchedChars, Txn, CmdType) ->
                     Item1 = Item#{key_values => KVs ++ [MatchedChars]},
                     Children = menu_item_children(Item1, Txn, CmdType),
                     %% ?DBG("Children new list ~p of item ~p~n",[Children, Item1]),
-                    Menu = cli:format_menu(Children),
+                    Menu = ecli:format_menu(Children),
                     {yes, "", Menu};
                true ->
                     %% Still a number of matching menu items. auto fill up to
                     %% the point they diverge
                     Chars = expand_menus(MatchedChars, Items),
-                    Menu = cli:format_menu(Items),
+                    Menu = ecli:format_menu(Items),
                     {yes, Chars, Menu}
             end
     end;
@@ -236,12 +236,12 @@ chars_to_expand(Str, Match) ->
 %% each key in sequence. Once we have all list keys children become
 %% the items inside the list item, minus the list key names.
 menu_item_children(Item, Txn, CmdType) ->
-     cli_util:children(Item, Txn, CmdType).
+     ecli_util:children(Item, Txn, CmdType).
 
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"
 expand_menus(Str, Menus) ->
-    %% ?DBG("cli_expand:expand_menus ~p~n ~p ~n",[Str, Menus]),
+    %% ?DBG("ecli_expand:expand_menus ~p~n ~p ~n",[Str, Menus]),
     StrLen = length(Str),
     Suffixes = lists:map(fun(#{name := Name}) ->
                                  lists:nthtail(StrLen, Name)

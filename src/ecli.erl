@@ -6,9 +6,9 @@
 %%% @end
 %%% Created : 11 Sep 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli).
+-module(ecli).
 
--include("cli.hrl").
+-include("ecli.hrl").
 -include("debug.hrl").
 
 %% API
@@ -37,7 +37,7 @@
 %%--------------------------------------------------------------------
 -spec open(Path::string(), CLIModule::atom()) -> {ok, pid()} | {error, term()}.
 open(Path, CLIModule) ->
-    cli_sup:start_child(Path, CLIModule).
+    ecli_sup:start_child(Path, CLIModule).
 
 %%--------------------------------------------------------------------
 %% @doc Close the server end of a previously opened CLI socket. Pid must
@@ -46,7 +46,7 @@ open(Path, CLIModule) ->
 %%--------------------------------------------------------------------
 -spec close(pid()) -> ok | {error, running | restarting | not_found}.
 close(Pid) ->
-    cli_sup:stop_child(Pid).
+    ecli_sup:stop_child(Pid).
 
 
 %%--------------------------------------------------------------------
@@ -72,10 +72,10 @@ value(Fun) ->
 %% @end
 %%--------------------------------------------------------------------
 expand(Str, Tree) ->
-    cli_expand:expand(Str, Tree).
+    ecli_expand:expand(Str, Tree).
 
 expand(Str, Tree, UserTxn) ->
-    cli_expand:expand(Str, Tree, UserTxn).
+    ecli_expand:expand(Str, Tree, UserTxn).
 
 %%--------------------------------------------------------------------
 %% @doc Given a full command string and a tree of items return false
@@ -86,7 +86,7 @@ expand(Str, Tree, UserTxn) ->
 %%--------------------------------------------------------------------
 -spec lookup(Path::string(), Tree::term(), term()) -> {ok, fun()} | false.
 lookup(Str, Tree, Txn) ->
-    cli_lookup:lookup(Str, Tree, Txn).
+    ecli_lookup:lookup(Str, Tree, Txn).
 
 
 %%--------------------------------------------------------------------

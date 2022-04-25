@@ -1,8 +1,8 @@
-{application, cli,
- [{description, "Command line handling"},
+{application, ecli,
+ [{description, "Erlang command line handling"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, { cli_app, []}},
+  {mod, { ecli_app, []}},
   {applications,
    [kernel,
     stdlib

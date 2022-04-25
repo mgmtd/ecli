@@ -5,7 +5,7 @@
 %%% @end
 %%% Created : 16 Aug 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_edlin).
+-module(ecli_edlin).
 
 -export([start/1, insert/2]).
 

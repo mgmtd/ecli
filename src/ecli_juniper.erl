@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 31 Aug 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_juniper).
+-module(ecli_juniper).
 
 -export([init/0,
          banner/1,
@@ -47,12 +47,12 @@ prompt(#cli_juniper{mode = Mode}) ->
 
 
 expand([], #cli_juniper{mode = operational} = J) ->
-    {no, [], cli:format_menu(operational_menu()), J};
+    {no, [], ecli:format_menu(operational_menu()), J};
 expand(Chars, #cli_juniper{mode = operational} = J) ->
     %% io:format("expand ~p~n",[Chars]),
     match_menu_item(Chars, operational_menu(), J);
 expand([], #cli_juniper{mode = configuration} = J) ->
-    {no, [], cli:format_menu(configuration_menu()), J};
+    {no, [], ecli:format_menu(configuration_menu()), J};
 expand(Chars, #cli_juniper{mode = configuration} = J) ->
     io:format("expand config ~p~n",[Chars]),
     match_menu_item(Chars, configuration_menu(), J).
@@ -187,7 +187,7 @@ cfg_set(_Txn, _Path, _Value) ->
 match_menu_item(Str, Menu, J) ->
     %% io:format("match_menu_item ~p~n",[Str]),
     %% Use the library function provided in cli to take care of the expansion
-    case cli:expand(Str, Menu, J#cli_juniper.user_txn) of
+    case ecli:expand(Str, Menu, J#cli_juniper.user_txn) of
         no ->
             {no, [], [], J};
         {yes, Extra, MenuItems} ->
@@ -195,7 +195,7 @@ match_menu_item(Str, Menu, J) ->
     end.
 
 execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
-    case cli:lookup(CmdStr, Menu, Txn) of
+    case ecli:lookup(CmdStr, Menu, Txn) of
         {error, Reason} ->
             {ok, Reason, J};
         {ok, Cmd, Path, Value} ->

@@ -3,7 +3,7 @@
 %% @end
 %%%-------------------------------------------------------------------
 
--module(cli_sup).
+-module(ecli_sup).
 
 -behaviour(supervisor).
 
@@ -39,7 +39,7 @@ init([]) ->
                  period    => 10
                 },
     Child = #{id => ?MODULE,
-              start => {cli_unixdom_listen, start_link, []},
+              start => {ecli_unixdom_listen, start_link, []},
               restart => permanent},
     {ok, {SupFlags, [Child]} }.
 

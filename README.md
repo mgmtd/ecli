@@ -10,7 +10,7 @@ style command line access to a system. Features:
 
 * Unix domain socket server to receive connections from the cli program
 
-* Example implementation - cli_juniper.erl to show how to build a
+* Example implementation - ecli_juniper.erl to show how to build a
   Juniper style command line interface
 
 * Expansion assistant - library module to provide tab/spc completion
@@ -50,9 +50,9 @@ Run in test mode
     $ rebar3 shell
 
     Eshell V10.4  (abort with ^G)
-    1> application:start(cli).
+    1> application:start(ecli).
     ok
-    2> cli:open("/var/tmp/mgmtd.cli.socket", cli_juniper).
+    2> ecli:open("/var/tmp/mgmtd.cli.socket", ecli_juniper).
     {ok,<0.131.0>}
     3>
 
@@ -115,7 +115,7 @@ Many things:
 - [ ] Use the values extracted from terminfo properly
 - [ ] CTRL-c handling in the cli program
 - [ ] CTRL-d to close session (or exit configure mode) if at start of line
-- [ ] Lots more of the control keys in cli_edlin.erl need to be hooked up
+- [ ] Lots more of the control keys in ecli_edlin.erl need to be hooked up
 - [ ] cursor back from a second line goes to the wrong place
 - [ ] proper logging of user commands
 - [ ] skipping over control sequences in output e.g. coloring

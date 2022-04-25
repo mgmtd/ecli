@@ -2,13 +2,13 @@
 %%% @author Sean Hinde <sean@Seans-MacBook.local>
 %%% @copyright (C) 2019, Sean Hinde
 %%% @doc Looking up node in a tree from a command string
-%%%      Similar functionality to cli_expand but just a bit messy to
+%%%      Similar functionality to ecli_expand but just a bit messy to
 %%%      combine them
 %%%
 %%% @end
 %%% Created : 18 Sep 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_lookup).
+-module(ecli_lookup).
 
 -include("debug.hrl").
 
@@ -59,14 +59,14 @@ lookup(Str, Tree, Txn, Cmd, Acc) ->
                             %% the list key
                             {KeyValues, T} = parse_list_keys(Tail, length(KeyNames)),
                             ListItem = Item#{key_values := KeyValues},
-                            Children = cli_util:children(ListItem, Txn, Cmd),
+                            Children = ecli_util:children(ListItem, Txn, Cmd),
                             if Cmd == undefined ->
                                     lookup(T, Children, Txn, [ListItem], Acc);
                                true ->
                                     lookup(T, Children, Txn, Cmd, [ListItem|Acc])
                             end;
                         _ ->
-                            Children = cli_util:children(Item, Txn, Cmd),
+                            Children = ecli_util:children(Item, Txn, Cmd),
                             if Cmd == undefined ->
                                     lookup(Tail, Children, Txn, [Item], Acc);
                                true ->

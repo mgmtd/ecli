@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 15 Aug 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
--module(cli_server).
+-module(ecli_server).
 
 -include("debug.hrl").
 
@@ -26,10 +26,10 @@
           socket,
           listen_pid,
           listen_socket,
-          term,                                 % #cli_term{}
-          edlin,                                % #cli_edlin{}
-          cli_mod,         % User defined CLI callback implementation
-          cli_state,          % State threaded through cli callbacks
+          term,                                 % #ecli_term{}
+          edlin,                                % #ecli_edlin{}
+          ecli_mod,         % User defined CLI callback implementation
+          ecli_state,          % State threaded through cli callbacks
           got_meta = false,
           buf = <<>>                     % Temp buf for UTF boundaries
          }).
@@ -67,7 +67,7 @@ init([ListenPid, ListenSocket, CliMod]) ->
     self() ! start_accepting,
     {ok, #state{listen_pid = ListenPid,
                 listen_socket = ListenSocket,
-                cli_mod = CliMod
+                ecli_mod = CliMod
                }}.
 
 %%--------------------------------------------------------------------
@@ -114,16 +114,16 @@ handle_cast(_Msg, State) ->
 handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State) ->
     case gen_tcp:accept(Ls) of
         {ok, Socket} ->
-            cli_unixdom_listen:notify_connection_established(Lp),
+            ecli_unixdom_listen:notify_connection_established(Lp),
             inet:setopts(Socket, [{active, once}]),
             {noreply, State#state{socket = Socket}};
         {error, _Reason} = Err ->
             {stop, Err, State}
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false,
-                                        cli_mod = CliMod} = State) ->
+                                        ecli_mod = CliMod} = State) ->
     %% Initialise terminal with metadata received from the cli C program
-    {ok, Term} = cli_term:new(Data),
+    {ok, Term} = ecli_term:new(Data),
 
     %% Fetch the initial callback module state
     {ok, CliState} = CliMod:init(),
@@ -134,14 +134,14 @@ handle_info({tcp, Socket, Data}, #state{got_meta = false,
 
     %% Set up edlin with the intial prompt
     {ok, Prompt} = CliMod:prompt(CliState),
-    {Edlin, InitialOps} = cli_edlin:start(Prompt),
+    {Edlin, InitialOps} = ecli_edlin:start(Prompt),
     Term1 = send_drv(InitialOps, Socket, Term),
 
     %% Start Fetching user input from the cli program
     inet:setopts(Socket, [{active, once}]),
 
     {noreply, State#state{got_meta = true, term = Term1,
-                          edlin = Edlin, cli_state = CliState}};
+                          edlin = Edlin, ecli_state = CliState}};
 handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
     %% ?DBG("GOT ~p~n",[Data]),
     %% We received one or more chars. Normal chars get appended to the
@@ -198,15 +198,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
-    case cli_edlin:insert(CharList, State#state.edlin) of
+get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
+    case ecli_edlin:insert(CharList, State#state.edlin) of
         {more_chars, Edlin, Ops} ->
             %% ?DBG("Inserted ~p\r\n",[{more_chars, Edlin, Ops}]),
             Term = send_drv(Ops, State#state.socket, State#state.term),
             {ok, State#state{edlin = Edlin, term = Term}};
         {expand, Before0, Cs0, Edlin} ->
             Before = lists:reverse(Before0),
-            {Found, Add, Matches, CliState} = CliMod:expand(Before, State#state.cli_state),
+            {Found, Add, Matches, CliState} = CliMod:expand(Before, State#state.ecli_state),
             case Found of
                 no ->
                     case whitespace_only(Before) of
@@ -225,27 +225,27 @@ get_chars_loop(CharList, #state{cli_mod = CliMod} = State) ->
                         ok = send_raw(Matches, State),
                         [$\^L | Cs1]
                 end,
-            get_chars_loop(Cs, State#state{edlin = Edlin, cli_state = CliState});
+            get_chars_loop(Cs, State#state{edlin = Edlin, ecli_state = CliState});
         {done, FullLine, Cs, Ops} ->
             %% ?DBG("CMD: ~p~n",[FullLine]),
-            {ok, Output, CliState} = CliMod:execute(FullLine, State#state.cli_state),
+            {ok, Output, CliState} = CliMod:execute(FullLine, State#state.ecli_state),
             ok = send_raw("\r\n", State),
             ok = send_raw(Output, State),
             Term = send_drv(Ops, State#state.socket, State#state.term),
             {ok, Prompt} = CliMod:prompt(CliState),
-            {Edlin, InitialOps} = cli_edlin:start(Prompt),
+            {Edlin, InitialOps} = ecli_edlin:start(Prompt),
             Term1 = send_drv(InitialOps, State#state.socket, Term),
             get_chars_loop(Cs, State#state{term = Term1,
                                            edlin = Edlin,
-                                           cli_state = CliState})
+                                           ecli_state = CliState})
     end.
 
 
 send_drv(Ops, Socket, Term0) ->
     %% ?DBG("Sending Ops~p\r\n",[Ops]),
-    %% ?DBG("Term before ~s\r\n",[cli_term:print(Term0)]),
-    {Bytes, Term} = cli_term:send_ops(Ops, Term0),
-    %% ?DBG("Term after ~s\r\n",[cli_term:print(Term)]),
+    %% ?DBG("Term before ~s\r\n",[ecli_term:print(Term0)]),
+    {Bytes, Term} = ecli_term:send_ops(Ops, Term0),
+    %% ?DBG("Term after ~s\r\n",[ecli_term:print(Term)]),
     ok = gen_tcp:send(Socket, Bytes),
     inet:setopts(Socket, [{active, once}]),
     Term.
