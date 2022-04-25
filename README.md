@@ -52,7 +52,7 @@ Run in test mode
     Eshell V10.4  (abort with ^G)
     1> application:start(cli).
     ok
-    2> cli:open("/var/tmp/example.socket", cli_juniper).
+    2> cli:open("/var/tmp/mgmtd.cli.socket", cli_juniper).
     {ok,<0.131.0>}
     3>
 

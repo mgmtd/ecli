@@ -56,7 +56,7 @@ static void enableRawMode() {
    https://stackoverflow.com/questions/3324619/unix-domain-socket-using-datagram-communication-between-one-server-process-and */
 static int openUnixDomSocket() {
   int sock_fd;
-  char * server_filename = "/var/tmp/example.socket";
+  char * server_filename = "/var/tmp/mgmtd.cli.socket";
 
   struct sockaddr_un server_addr;
   memset(&server_addr, 0, sizeof(server_addr));
