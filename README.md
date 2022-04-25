@@ -6,9 +6,9 @@ An Erlang/OTP application providing an online command line interface.
 Provides a collection of libraries designed to make it easy to build telecom
 style command line access to a system. Features:
 
-* Small C program 'cli' to access the command line via a unix domain socket
+* Small C program 'ecli' to access the command line via a unix domain socket
 
-* Unix domain socket server to receive connections from the cli program
+* Unix domain socket server to receive connections from the ecli program
 
 * Example implementation - ecli_juniper.erl to show how to build a
   Juniper style command line interface
@@ -58,7 +58,7 @@ Run in test mode
 
 Then attach the cli and poke around:
 
-    ./_build/default/lib/cli/priv/cli
+    ./_build/default/lib/ecli/priv/ecli
 
     Welcome to the Juniper style CLI
     Hit TAB, SPC or ? at any time to see available options
@@ -109,7 +109,7 @@ Many things:
 
 - [ ] Hook up sigwinch events in cli and pass up to server
 - [ ] Grab the user details from the unix domain socket and pass to an
-      authentication callback of some kind.
+      authorisation callback of some kind.
 - [ ] Provide a way for cli to connect to different unix domain paths
 - [ ] Completion of value types - strings, leaf lists, enums
 - [ ] Use the values extracted from terminfo properly
@@ -119,3 +119,4 @@ Many things:
 - [ ] cursor back from a second line goes to the wrong place
 - [ ] proper logging of user commands
 - [ ] skipping over control sequences in output e.g. coloring
+- [ ] Pipe command modifiers
