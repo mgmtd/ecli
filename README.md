@@ -1,5 +1,5 @@
-cli
-===
+ecli
+====
 
 An Erlang/OTP application providing an online command line interface.
 
