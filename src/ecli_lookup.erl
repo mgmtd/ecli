@@ -27,16 +27,16 @@
 
 lookup(Str, Tree, Txn) ->
     %% ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
-    lookup(Str, Tree, Txn, undefined, []).
+    lookup(Str, Tree, Txn, []).
 
-lookup(Str, Tree, Txn, Cmd, Acc) ->
+lookup(Str, Tree, Txn, Acc) ->
     case next_element(Str) of
         {[],_} ->
             {error, "Unknown no token"};
         {PathPart, []} ->
             case lookup_by_name(PathPart, Tree) of
                 {ok, Item} ->
-                    return(Cmd, [Item|Acc], "");
+                    return([Item|Acc], "");
                 {error, _} = Err ->
                    Err
             end;
@@ -45,7 +45,7 @@ lookup(Str, Tree, Txn, Cmd, Acc) ->
                 {ok, #{node_type := NodeType} = Item} ->
                     case NodeType of
                         _ when NodeType == leaf orelse NodeType == leaf_list ->
-                            return(Cmd, [Item|Acc], Tail);
+                            return([Item|Acc], Tail);
                         list ->
                             %% For a list item the following N items
                             %% will make up the list keys and need to
@@ -59,19 +59,11 @@ lookup(Str, Tree, Txn, Cmd, Acc) ->
                             %% the list key
                             {KeyValues, T} = parse_list_keys(Tail, length(KeyNames)),
                             ListItem = Item#{key_values := KeyValues},
-                            Children = ecli_util:children(ListItem, Txn, Cmd),
-                            if Cmd == undefined ->
-                                    lookup(T, Children, Txn, [ListItem], Acc);
-                               true ->
-                                    lookup(T, Children, Txn, Cmd, [ListItem|Acc])
-                            end;
+                            Children = ecli_util:children(ListItem, Txn, undef),
+                            lookup(T, Children, Txn, [ListItem|Acc]);
                         _ ->
-                            Children = ecli_util:children(Item, Txn, Cmd),
-                            if Cmd == undefined ->
-                                    lookup(Tail, Children, Txn, [Item], Acc);
-                               true ->
-                                    lookup(Tail, Children, Txn, Cmd, [Item|Acc])
-                            end
+                            Children = ecli_util:children(Item, Txn, undef),
+                            lookup(Tail, Children, Txn, [Item|Acc])
                     end;
                 {error, _} = Err ->
                     Err
@@ -97,14 +89,9 @@ lookup_by_name(Name, [_ | Tree]) ->
 lookup_by_name(_, []) ->
     {error, "No such command"}.
 
-return(Cmd, Items, Tail) ->
-    if Cmd == undefined ->
-            %% Assume the first nodes encountered are
-            %% the command (i.e. show|set etc)
-            {ok, Items, undefined, Tail};
-       true ->
-            {ok, Cmd, lists:reverse(Items), Tail}
-    end.
+return(PathItems, Tail) ->
+    {Cmd, Items} = lists:splitwith(fun(#{role := Role}) -> Role == cmd end, lists:reverse(PathItems)),
+    {ok, Cmd, Items, Tail}.
 
 next_element(Str) ->
     Trimmed = string:trim(Str, leading),

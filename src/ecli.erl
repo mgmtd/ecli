@@ -22,6 +22,7 @@
          expand/2, expand/3,
          lookup/3,
          format/1,
+         format_table/1,
          format_menu/1,
          format_simple_tree/1
         ]).
@@ -172,19 +173,50 @@ format(#{} = Map) ->
 
 format_value(Bin) when is_binary(Bin) -> Bin;
 format_value(Int) when is_integer(Int) -> integer_to_binary(Int);
+format_value(Atom) when is_atom(Atom) -> atom_to_binary(Atom);
 format_value(Else) -> io_lib:format("~p", [Else]).
 
+format_table([#{} = Map | _] = Maps) ->
+    Titles = maps:keys(Map),
+    TitleLengths = lists:map(fun(T) -> {T, key_size(T)} end, Titles),
+    Lengths = maps:from_list(TitleLengths),
+    ColLengths = lists:foldl(
+                    fun(M, Ls) ->
+                        maps:fold(fun(K, V, L) ->
+                            maps:put(K, max(maps:get(K, L), printable_size(V)), L)
+                        end, Ls, M)
+                    end, Lengths, Maps),
+    TitleRow = pad_row(maps:to_list(ColLengths)),
+    TitleUnderline = pad_row(lists:map(fun({T, L}) -> {list_to_binary(lists:duplicate(printable_size(T), $-)), L} end, maps:to_list(ColLengths))),
+    Rows = lists:map(fun(Row) ->
+                        RowWithLengths = lists:map(fun(T) -> {maps:get(T, Row), maps:get(T, ColLengths)} end, Titles),
+                        [pad_row(RowWithLengths), "\r\n"]
+                     end, Maps),
+    [TitleRow, "\r\n", TitleUnderline, "\r\n", Rows].
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 key_size(Bin) when is_binary(Bin) -> size(Bin);
+key_size(Atom) when is_atom(Atom) -> size(atom_to_binary(Atom));
 key_size(Str) when is_list(Str) -> length(Str).
+
+printable_size(Int) when is_integer(Int) -> size(integer_to_binary(Int));
+printable_size(Atom) when is_atom(Atom) -> size(atom_to_binary(Atom));
+printable_size(V) -> iolist_size(V).
 
 pad(Val, Len) ->
     Sz = key_size(Val),
     Pad = max(0, Len - Sz),
     [Val, spaces(Pad)].
+
+pad_row([]) ->
+    [];
+pad_row([{Val, _Len}]) ->
+    [format_value(Val)];
+pad_row([{Val, Len} | Vals]) ->
+    Printable = format_value(Val),
+    [pad(Printable, Len + 1) | pad_row(Vals)].
 
 spaces(Num) ->
     lists:duplicate(Num, $\s).
