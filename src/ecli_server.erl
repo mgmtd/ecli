@@ -164,8 +164,12 @@ handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
                                {Chars, <<>>}
                        end,
 
-    {ok, State1} = get_chars_loop(CharList, State),
-    {noreply, State1#state{buf = Buf1}};
+    case get_chars_loop(CharList, State) of
+        {ok, State1} ->
+            {noreply, State1#state{buf = Buf1}};
+        stop ->
+            {stop, normal, State}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -229,18 +233,23 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
             get_chars_loop(Cs, State#state{edlin = Edlin, ecli_state = CliState});
         {done, FullLine, Cs, Ops} ->
             %% ?DBG("CMD: ~p~n",[FullLine]),
-            {ok, Output, CliState} = CliMod:execute(FullLine, State#state.ecli_state),
-            ok = send_raw("\r\n", State),
-            ok = send_raw(Output, State),
-            Term = send_drv(Ops, State#state.socket, State#state.term),
-            {ok, Prompt} = CliMod:prompt(CliState),
-            History = [FullLine | State#state.history],
-            {Edlin, InitialOps} = ecli_edlin:start(Prompt, History),
-            Term1 = send_drv(InitialOps, State#state.socket, Term),
-            get_chars_loop(Cs, State#state{term = Term1,
-                                           edlin = Edlin,
-                                           history = History,
-                                           ecli_state = CliState})
+            case CliMod:execute(FullLine, State#state.ecli_state) of
+                {ok, Output, CliState} ->
+                    ok = send_raw("\r\n", State),
+                    ok = send_raw(Output, State),
+                    Term = send_drv(Ops, State#state.socket, State#state.term),
+                    {ok, Prompt} = CliMod:prompt(CliState),
+                    History = [FullLine | State#state.history],
+                    {Edlin, InitialOps} = ecli_edlin:start(Prompt, History),
+                    Term1 = send_drv(InitialOps, State#state.socket, Term),
+                    get_chars_loop(Cs, State#state{term = Term1,
+                                                edlin = Edlin,
+                                                history = History,
+                                                ecli_state = CliState});
+                stop ->
+                    gen_tcp:close(State#state.socket),
+                    stop
+            end
     end.
 
 

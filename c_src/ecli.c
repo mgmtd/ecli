@@ -286,12 +286,15 @@ int main() {
           perror("read error on socket");
 
       } else if (n == 0) {
-        fprintf(stderr, "EOF on socket\r\n");
+        // fprintf(stderr, "EOF on socket\r\n");
         if (stdineof)
           return 0;     /* normal termination */
         else {
-          perror("str_cli: server terminated prematurely");
-          exit(1);
+          // Server end closed. Either user ran an exit cmd or server died
+          // FIXME - print something scary if the server died but not otherwise
+          // perror("str_cli: server terminated prematurely");
+          fprintf(stdout, "\r\n");
+          exit(0);
         }
 
       } else {
