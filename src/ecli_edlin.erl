@@ -2,19 +2,21 @@
 %%% @author Sean Hinde <sean@Seans-MacBook.local>
 %%% @copyright (C) 2019, Sean Hinde
 %%% @doc Line editing. Based mostly on erlang edlin.erl
+%%%      History handling also driven directly from here
 %%% @end
 %%% Created : 16 Aug 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
 -module(ecli_edlin).
 
--export([start/1, insert/2]).
+-export([start/1, start/2, insert/2]).
 
 -record(edlin,
         {
           line = {[], []},       % {Chars_before_cursor, Chars_after}
           state = none,
           prompt,
-          requests = []
+          requests = [],
+          history = {[],[]}      % {Before, After}
         }).
 
 %%--------------------------------------------------------------------
@@ -23,6 +25,16 @@
 -spec start(Prompt::string()) -> #edlin{}.
 start(Prompt) when is_list(Prompt) ->
     {#edlin{prompt = Prompt}, [{put_chars,unicode,Prompt}]}.
+
+%% Create a new edlin but with existing line history. It's not obvious where
+%% to handle history. It's not really a property of line editing, but it is
+%% very linked. We rely on the ecli_server to have full control over adding
+%% complete commands to the history, but it passes the whole history fresh to us as
+%% we have the mechanisms to move around it. We are free to edit our copy as
+%% much as we like, but we always get a fresh one after each command
+-spec start(Prompt::string(), {list(), list()}) -> #edlin{}.
+start(Prompt, History) when is_list(Prompt), is_list(History) ->
+    {#edlin{prompt = Prompt, history = ecli_history:new(History)}, [{put_chars,unicode,Prompt}]}.
 
 insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
                       requests = Rs0, prompt = Prompt} = Ed) ->
@@ -40,14 +52,45 @@ insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
         meta_left_sq_bracket ->
             insert(Cs, Ed#edlin{state = meta_left_sq_bracket});
         new_line ->
-            {done, get_line(Bef, Aft), Cs,
+            Line = get_line(Bef, Aft),
+            {done, Line, Cs,
              lists:reverse(Rs0, [{move_rel,cp_len(Aft)}, crnl])};
         redraw_line ->
-	    Rs1 = erase(Prompt, Bef, Aft, Rs0),
-	    Rs = redraw(Prompt, Bef, Aft, Rs1),
-	    insert(Cs, Ed#edlin{state = none, requests = Rs});
+            Rs1 = erase(Prompt, Bef, Aft, Rs0),
+            Rs = redraw(Prompt, Bef, Aft, Rs1),
+            insert(Cs, Ed#edlin{state = none, requests = Rs});
         tab_expand ->
             {expand, Bef, Cs, Ed#edlin{state = none}};
+        prev_history ->
+            %% Store the current line in the history and grab the prev
+            CurrentLine = get_line(Bef, Aft),
+            case ecli_history:prev(CurrentLine,  Ed#edlin.history) of
+                false ->
+                    insert(Cs, Ed#edlin{state = none});
+                {Prev, History} ->
+                    %% Like redraw, but with a completely different text and the cursor
+                    %% at the end.
+                    Rs1 = erase(Prompt, Bef, Aft, Rs0),
+                    Rs = insert_chars(Prompt, Prev, Rs1),
+                    Line = {lists:reverse(Prev), []},
+                    insert(Cs, Ed#edlin{line = Line, state = none,
+                                        requests = Rs, history = History})
+            end;
+        next_history ->
+            %% Store the current line in the history and grab the next
+            CurrentLine = get_line(Bef, Aft),
+            case ecli_history:next(CurrentLine,  Ed#edlin.history) of
+                false ->
+                    insert(Cs, Ed#edlin{state = none});
+                {Next, History} ->
+                    %% Like redraw, but with a completely different text and the cursor
+                    %% at the end.
+                    Rs1 = erase(Prompt, Bef, Aft, Rs0),
+                    Rs = insert_chars(Prompt, Next, Rs1),
+                    Line = {lists:reverse(Next), []},
+                    insert(Cs, Ed#edlin{line = Line, state = none,
+                                        requests = Rs, history = History})
+            end;
         {undefined,C} ->
             insert(Cs, Ed#edlin{state = none});
         Op ->
@@ -89,6 +132,8 @@ key_map($\^], none) -> auto_blink;
 key_map($\^X, none) -> ctlx;
 key_map($\^Y, none) -> yank;
 key_map($\^W, none) -> backward_kill_word;
+key_map($\^p, none) -> prev_history;
+key_map($\^n, none) -> next_history;
 key_map($\e, none) -> meta;
 key_map($), Prefix) when Prefix =/= meta,
                          Prefix =/= search,
@@ -119,6 +164,8 @@ key_map($H, meta_left_sq_bracket) -> beginning_of_line;
 key_map($F, meta_left_sq_bracket) -> end_of_line;
 key_map($D, meta_left_sq_bracket) -> backward_char;
 key_map($C, meta_left_sq_bracket) -> forward_char;
+key_map($A, meta_left_sq_bracket) -> prev_history;
+key_map($B, meta_left_sq_bracket) -> next_history;
 % support a few <CTRL>+<CURSOR LEFT|RIGHT> combinations...
 %  - forward:  \e\e[C, \e[5C, \e[1;5C
 %  - backward: \e\e[D, \e[5D, \e[1;5D
@@ -289,6 +336,9 @@ erase(Pbs, Bef, Aft, Rs) ->
 
 redraw(Pbs, Bef, Aft, Rs) ->
     [{move_rel,-cp_len(Aft)},{put_chars, unicode,lists:reverse(Bef, Aft)},{put_chars, unicode,Pbs}|Rs].
+
+insert_chars(Pbs, Chars, Rs) ->
+    [{put_chars, unicode, Chars},{put_chars, unicode,Pbs} | Rs].
 
 get_line(Bef, Aft) ->
     unicode:characters_to_list(lists:reverse(Bef, Aft)).
