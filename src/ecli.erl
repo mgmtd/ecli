@@ -21,6 +21,7 @@
 -export([
          expand/2, expand/3,
          lookup/3,
+         format/1,
          format_menu/1,
          format_simple_tree/1
         ]).
@@ -123,7 +124,7 @@ format_list_menu([]) ->
 format_list_menu(Items) ->
     Select = "Select from the existing entries\r\n",
     MaxCmdLen = max_cmd_len(Items),
-    Menu = lists:map(fun(#{name := Name, desc := Desc}) ->
+    Menu = lists:map(fun(#{name := Name, desc := _Desc}) ->
                              ["  ", pad(Name, MaxCmdLen + 1), "\r\n"]
                      end, Items),
     ["\r\n", Select, Menu].
@@ -139,11 +140,6 @@ max_cmd_len([]) ->
 max_cmd_len(Items) ->
     lists:max(lists:map(fun(#{name := Name}) -> length(Name) end, Items)).
 
-pad(Str, Len) ->
-    Pad = spaces(Len - length(Str)),
-    [Str, Pad].
-
-
 format_simple_tree(Tree) ->
     format_simple_tree(Tree, 0).
 
@@ -151,7 +147,6 @@ format_simple_tree([{Name, {value, Val}}|Ts], Padding) ->
     [spaces(Padding), Name," ", Val, ";\r\n",
      format_simple_tree(Ts, Padding)];
 format_simple_tree([{Name, Children}|Ts], Padding) ->
-    Pad = Padding + 2,
     [spaces(Padding), fmt_name(Name), " {\r\n",
      format_simple_tree(Children, Padding + 2),
      spaces(Padding), "}\r\n",
@@ -163,10 +158,33 @@ fmt_name(T) when is_tuple(T) ->
     lists:join(" ", tuple_to_list(T));
 fmt_name(N) -> N.
 
+%%--------------------------------------------------------------------
+%% @doc Format output from a command in pretty format.
+%%      padding to align the descriptions.
+%%
+%%      Takes a map or Key value list
+%% @end
+%%--------------------------------------------------------------------
+format(#{} = Map) ->
+    Keys = maps:keys(Map),
+    Longest = lists:max(lists:map(fun(K) -> key_size(K) end, Keys)),
+    lists:map(fun(K) -> [pad(K, Longest), " : ", format_value(maps:get(K, Map)), "\r\n"] end, Keys).
 
-spaces(Num) ->
-    lists:duplicate(Num, $\s).
+format_value(Bin) when is_binary(Bin) -> Bin;
+format_value(Int) when is_integer(Int) -> integer_to_binary(Int);
+format_value(Else) -> io_lib:format("~p", [Else]).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+key_size(Bin) when is_binary(Bin) -> size(Bin);
+key_size(Str) when is_list(Str) -> length(Str).
+
+pad(Val, Len) ->
+    Sz = key_size(Val),
+    Pad = max(0, Len - Sz),
+    [Val, spaces(Pad)].
+
+spaces(Num) ->
+    lists:duplicate(Num, $\s).
