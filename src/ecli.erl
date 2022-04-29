@@ -50,7 +50,6 @@ open(Path, CLIModule) ->
 close(Pid) ->
     ecli_sup:stop_child(Pid).
 
-
 %%--------------------------------------------------------------------
 %% @doc Create a more complex spec for children in the cli tree
 %%--------------------------------------------------------------------
@@ -89,7 +88,6 @@ expand(Str, Tree, UserTxn) ->
 -spec lookup(Path::string(), Tree::term(), term()) -> {ok, fun()} | false.
 lookup(Str, Tree, Txn) ->
     ecli_lookup:lookup(Str, Tree, Txn).
-
 
 %%--------------------------------------------------------------------
 %% @doc Given a list of menu items format it for display inserting

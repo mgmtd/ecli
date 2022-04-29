@@ -22,10 +22,11 @@
 %% where CharsToInsert are characters to be automatically appended to
 %% the user input, and Menu is a list of nodes to be presented to the
 %% user as a menu of possible next items.
--spec expand(string(), list(), list()) -> {yes, string(), list()} | no.
+-spec expand(string(), list()) -> {yes, string(), list()} | no.
 expand(Str, Tree) ->
     expand(Str, Tree, undefined).
 
+-spec expand(string(), list(), any()) -> {yes, string(), list()} | no.
 expand(Str, Tree, Txn) ->
     Stripped = ecli_util:strip_ws(Str),
     expand(Stripped, Tree, [], Txn, undefined).
