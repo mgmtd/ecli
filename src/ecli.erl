@@ -173,7 +173,7 @@ format(#{} = Map) ->
 
 format_value(Bin) when is_binary(Bin) -> Bin;
 format_value(Int) when is_integer(Int) -> integer_to_binary(Int);
-format_value(Atom) when is_atom(Atom) -> atom_to_binary(Atom);
+format_value(Atom) when is_atom(Atom) -> atom_to_list(Atom);
 format_value(Else) -> io_lib:format("~p", [Else]).
 
 format_table([#{} = Map | _] = Maps) ->
@@ -198,11 +198,11 @@ format_table([#{} = Map | _] = Maps) ->
 %%% Internal functions
 %%%===================================================================
 key_size(Bin) when is_binary(Bin) -> size(Bin);
-key_size(Atom) when is_atom(Atom) -> size(atom_to_binary(Atom));
+key_size(Atom) when is_atom(Atom) -> length(atom_to_list(Atom));
 key_size(Str) when is_list(Str) -> length(Str).
 
 printable_size(Int) when is_integer(Int) -> size(integer_to_binary(Int));
-printable_size(Atom) when is_atom(Atom) -> size(atom_to_binary(Atom));
+printable_size(Atom) when is_atom(Atom) -> length(atom_to_list(Atom));
 printable_size(V) -> iolist_size(V).
 
 pad(Val, Len) ->
