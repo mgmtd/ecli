@@ -8,7 +8,6 @@
 %%%-------------------------------------------------------------------
 -module(ecli_util).
 
--include("ecli.hrl").
 -include("debug.hrl").
 
 -export([children/3, expand_children/2]).
@@ -18,10 +17,9 @@
 
 %% Get the actual children from a tree item
 
-children(#{node_type := container, name := Name, children := Cs} = Item,
-         Txn, _CmdType) ->
+children(#{node_type := container, children := Cs} = Item,
+         _Txn, _CmdType) ->
     Path = maps:get(path, Item, []),
-    FullPath = Path ++ [Name],
     ItemsPath = items_path(Path, Item),
     Children = expand_children(Cs, ItemsPath),
     insert_full_path(Children, ItemsPath);
@@ -52,7 +50,7 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
             %% 2nd time:   Needed = 2, SoFar = 1, element = 2
             %% Last time:  Needed = 2, SoFar = 2
             NextKey = lists:nth(KeysSoFar + 1, KeyNames),
-            Keys = [NextKey | KeyValues],
+            _Keys = [NextKey | KeyValues],
             %% ?DBG("more keys needed ~p ~p ~p~n", [CmdType, NextKey, KeyValues]),
 
             ListKeyMatch = list_keys_match(KeysSoFar, KeysNeeded, KeyValues),
@@ -62,7 +60,12 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
                                _ ->
                                    Path
                            end,
-            ListKeys = cfg_txn:list_keys(Txn, ListItemPath, ListKeyMatch),
+             ListKeys = case Txn of
+                            undefined ->
+                                [];
+                            _ ->
+                                cfg_txn:list_keys(Txn, ListItemPath, ListKeyMatch)
+                        end,
             %% This is not yet all the keys. We need to only pick the current
             %% level, only unique values, and only items where the
             %% previous key parts match
@@ -94,8 +97,8 @@ children(#{node_type := List, path := Path, name := Name, children := Cs,
                     KeysItems
             end
     end;
-children(Item, _, _) ->
-    ?DBG("list children falltrhough ~p~n", [Item]),
+children(_Item, _, _) ->
+    ?DBG("list children falltrhough ~p~n", [_Item]),
     [].
 
 expand_children(F, Path) when is_function(F) ->

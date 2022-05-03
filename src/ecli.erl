@@ -9,7 +9,6 @@
 -module(ecli).
 
 -include("ecli.hrl").
--include("debug.hrl").
 
 %% API
 -export([open/2, close/1]).
@@ -95,13 +94,10 @@ lookup(Str, Tree, Txn) ->
 %% @end
 %%--------------------------------------------------------------------
 format_menu([]) -> "";
-format_menu([#{node_type := NodeType}|_] = Items) ->
-    case NodeType of
-        List when List == new_list_item; List == list_key  ->
-            format_list_menu(Items);
-        _ ->
-            format_normal_menu(Items)
-    end.
+format_menu([#{node_type := NodeType}|_] = Items) when NodeType == new_list_item; NodeType == list_key ->
+    format_list_menu(Items);
+format_menu(Items) ->
+    format_normal_menu(Items).
 
 format_normal_menu(Items) ->
     MaxCmdLen = max_cmd_len(Items),

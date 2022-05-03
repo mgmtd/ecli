@@ -14,204 +14,213 @@
 
 -export([expand/2, expand/3]).
 
-%%--------------------------------------------------------------------
-%% @doc expand a string based on a provided tree of nodes and the
-%% commands to extract known elements from tree items
-%%
-%% Returns no if nothing at all matched, or {yes, CharsToInsert, Menu}
-%% where CharsToInsert are characters to be automatically appended to
-%% the user input, and Menu is a list of nodes to be presented to the
-%% user as a menu of possible next items.
+-export([parse/2, parse/3]).
+
 -spec expand(string(), list()) -> {yes, string(), list()} | no.
 expand(Str, Tree) ->
     expand(Str, Tree, undefined).
 
 -spec expand(string(), list(), any()) -> {yes, string(), list()} | no.
 expand(Str, Tree, Txn) ->
-    Stripped = ecli_util:strip_ws(Str),
-    expand(Stripped, Tree, [], Txn, undefined).
-
-
-%% Expand a string according to a generic tree.
-%% This expansion termiates when we run out of characters, reach a
-%% terminal node, or the string no longer matches (syntax error)
-%%
-%% MenuItems here is always the current set of nodes we are trying to
-%% match against
-expand([], MenuItems, MatchedStr, Txn, CmdType) ->
-    %% ?DBG("expand end no space ~p~n",[length(MenuItems)]),
-    %% The end of the input but no space.
-    case MenuItems of
-        [] ->
-            %% Nothing matching
-            no;
-        [#{name := Name, node_type := NodeType} = Item] ->
-            if NodeType == new_list_item ->
-                    %% Adding a new list item. If the user has
-                    %% typed some characters towards the list item add
-                    %% the space to allow them to move on
-                    {yes, " ", []};
-               Name == MatchedStr ->
-                    %% And it has all the characters of that
-                    %% node. Insert the space on behalf of the user
-                    %% and grab the children to show as a menu.
-                    Children = menu_item_children(Item, Txn, CmdType),
-                    Menu = ecli:format_menu(Children),
-                    {yes, " ", Menu};
-               true ->
-                    %% The user didn't type all the characters, but it
-                    %% was enough to identify the single node. Insert the
-                    %% rest of the chars plus the following
-                    %% space. Don't get too carried away with showing
-                    %% the children as well at this point - it would
-                    %% all feel a bit too magic. Let them hit tab
-                    %% again to see the menu.
-                    {yes, chars_to_expand(MatchedStr, Name), []}
-            end;
-        [#{node_type := new_list_item} | _] ->
-            %% Adding a new list item when there are exsiting items
-            {yes, " ", []};
-        MenuItems ->
-            %% Still a number of matching menu items. auto fill up to
-            %% the point they diverge
-            Chars = expand_menus(MatchedStr, MenuItems),
-            Menu = ecli:format_menu(MenuItems),
-            {yes, Chars, Menu}
-    end;
-expand([$\s], [], _, _, _) ->
-    %% End of input after a space, but no matchable children
-    no;
-expand([$\s], Items, MatchedChars, Txn, CmdType) ->
-    %% ?DBG("expand space at end Items = ~p Matched = ~p~n",[length(Items), MatchedChars]),
-    %% ?DBG("Items ~p~n",[Items]),
-    %% Its the end of the input after a space, we want to show menus
-    case Items of
-        [#{name := Name, node_type := NodeType} = Item] ->
-            %% There's only one
-            if NodeType == new_list_item; NodeType == list_key ->
-                    %% Adding the first new list item
-                    %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
-                    #{key_values := KVs} = Item,
-                    Item1 = Item#{key_values => KVs ++ [MatchedChars]},
-                    Children = menu_item_children(Item1, Txn, CmdType),
-                    Menu = ecli:format_menu(Children),
-                    {yes, "", Menu};
-               Name == MatchedChars ->
-                    %% The current node is the one, show its children
-                    %% in a menu
-                    Cmd = cmd_type(CmdType, Item),
-                    Children = menu_item_children(Item, Txn, Cmd),
-                    %% ?DBG("ecli_expand: after spc children = ~p~n",[Children]),
-                    case Children of
-                        [#{name := OneName}] when NodeType /= list ->
-                            %% Only one - just fill it in for the user
-                            {yes, OneName ++ " ", ""};
-                        _ ->
-                            Menu = ecli:format_menu(Children),
-                            {yes, "", Menu}
-                    end;
-               true ->
-                    %% The user didn't type all the characters, but it
-                    %% was enough to identify the single node. Insert the
-                    %% rest of the chars plus the following
-                    %% space. Don't get too carried away with showing
-                    %% the children as well at this point - it would
-                    %% all feel a bit too magic. Let them hit tab
-                    %% again to see the menu.
-                    {yes, chars_to_expand(MatchedChars, Name), []}
-            end;
-        [#{node_type := NodeType} = Item|_] ->
-            if NodeType == new_list_item ->
-                    %% This is a new list item
-                    #{key_values := KVs} = Item,
-                    %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
-                    Item1 = Item#{key_values => KVs ++ [MatchedChars]},
-                    Children = menu_item_children(Item1, Txn, CmdType),
-                    %% ?DBG("Children new list ~p of item ~p~n",[Children, Item1]),
-                    Menu = ecli:format_menu(Children),
-                    {yes, "", Menu};
-               true ->
-                    %% Still a number of matching menu items. auto fill up to
-                    %% the point they diverge
-                    Chars = expand_menus(MatchedChars, Items),
-                    Menu = ecli:format_menu(Items),
-                    {yes, Chars, Menu}
-            end
-    end;
-expand([$\s|Cs], [#{name := Node, node_type := new_list_item} = Item], MatchedChars, Txn, CmdType) ->
-    %% We got down to just the special new list item. It must be a new
-    %% entry in our list as any existing entries have been discared
-    %% already
-    #{key_values := KVs} = Item,
-    Item1 = Item#{key_values => KVs ++ [MatchedChars]},
-    Children = menu_item_children(Item1, Txn, CmdType),
-    %% ?DBG("expand new list space Childrten ~p~n",[Children]),
-    expand(Cs, Children, [], Txn, CmdType);
-expand([$\s|Cs], [#{name := Node, node_type := NodeType} = Item], MatchedChars, Txn, CmdType) ->
-    %% ?DBG("expand space ~p matched = ~p~n",[1, MatchedChars]),
-    %% ?DBG("expand space Item ~p~n",[Item]),
-    case MatchedChars of
-        Node when NodeType == list_key ->
-            %% Matched an existing list item. Add it to the list keys
-            %% and carry on expanding
-            #{key_values := KVs} = Item,
-            %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
-            Item1 = Item#{key_values => KVs ++ [MatchedChars]},
-            Children = menu_item_children(Item1, Txn, CmdType),
-            %% ?DBG("expand space Childrten ~p~n",[Children]),
-            expand(Cs, Children, [], Txn, CmdType);
-        Node ->
-            %% Matched a full single level in the command tree with a
-            %% following space. Carry on to children
-            %% ?DBG("expand matched full level ~p~p~n",[Node,Item]),
-            Cmd = cmd_type(CmdType, Item),
-            Children = menu_item_children(Item, Txn, Cmd),
-            %% ?DBG("expand space Childrten ~p~n",[Children]),
-            expand(Cs, Children, [], Txn, Cmd);
-        _ ->
+    case ecli_tokenise:string(Str) of
+        {ok, Tokens} ->
+            parse(Tokens, Tree, Txn);
+        no ->
             no
-    end;
-expand([$\s|Cs], [#{node_type := NodeType} = Item | _] = MenuItems, MatchedChars, Txn, CmdType) ->
-    if  NodeType == new_list_item ->
-            %% Reached a space in the middle. If we are adding a list
-            %% item use it and move on
-            #{key_values := KVs} = Item,
-            %% ?DBG("Appennd Key Val ~p~n", [MatchedChars]),
-            Item1 = Item#{key_values => KVs ++ [MatchedChars]},
-            Children = menu_item_children(Item1, Txn, CmdType),
-            expand(Cs, Children, [], Txn, CmdType);
-        true ->
-            no
-    end;
-expand([C|Cs], [#{node_type := new_list_item} = NLI |Items] = MenuItems, Matched, Txn, CmdType) ->
-    %% When we are adding a new list item only try to expand against existing items, we want the special new_list_item entry to stay around
-    SoFar = Matched ++ [C],
-    Matches = filter_by_prefix(SoFar, Items),
-    case Matches of
-        [] ->
-            expand(Cs, [NLI], SoFar, Txn, CmdType);
-        KeptItems ->
-            expand(Cs, KeptItems, SoFar, Txn, CmdType)
-    end;
-expand([C|Cs], MenuItems, Matched, Txn, CmdType) ->
-    %% ?DBG("expand normal chars ~p matched = ~p~n",[[C], Matched]),
-    %% ?DBG("expand normal chars Items ~p~n",[MenuItems]),
-    SoFar = Matched ++ [C],
-    Matches = filter_by_prefix(SoFar, MenuItems),
-    case Matches of
-        [] ->
-            %% ?DBG("expand normal chars no matches true ~n",[]),
-            no;
-        Items ->
-            expand(Cs, Items, SoFar, Txn, CmdType)
     end.
 
-cmd_type(undefined, #{name := "set"}) ->
-    set;
-cmd_type(undefined, #{}) ->
-    show;
-cmd_type(Type, _) ->
-    Type.
+%% Tree directed parsing of the command line tokens
+parse(Tokens, Tree) ->
+    parse(Tokens, Tree, [], no_txn, no_cmd).
+
+parse(Tokens, Tree, Txn) ->
+    parse(Tokens, Tree, [], Txn, no_cmd).
+
+parse([], Tree, _Acc, _Txn, _Cmd) ->
+    %% No input yet, show the first menu
+    Menu = ecli:format_menu(Tree),
+    {yes, "", Menu};
+parse([{token, Tok}], MenuItems, Acc, Txn, Cmd) ->
+    ?DBG("Expanding after Token ~p = ~p~nAcc = ~p~n", [Tok, MenuItems, Acc]),
+    expand_after_token(Tok, MenuItems, Acc, Txn, Cmd);
+parse([space], MenuItems, Acc, Txn, Cmd) ->
+    ?DBG("Expanding after space = ~p~n", [Acc]),
+    expand_after_space(MenuItems, Acc, Txn, Cmd);
+parse([{part_string, _Str}], _Tree, _Acc, _Txn, _Cmd) ->
+    %% Nothing we can do here, the user need to carry on typing their string
+    %% (Or, maybe this is part of a list key we could complete... future)
+    no;
+parse([{token, Tok} | Ts], Tree, [], Txn, Cmd) ->
+    %% A token at the start. Expect it to match a container in the initial Tree
+    case lookup(Tok, Tree) of
+        {ok, #{node_type := container} = Item} ->
+            Children = menu_item_children(Item, Txn, Cmd),
+            %% io:format(user, "Starting with Item = ~p~n", [Item]),
+            parse(Ts, Children, [Item], Txn, Cmd);
+        {ok, #{node_type := leaf} = Item} ->
+            %% io:format(user, "Starting with Item = ~p~n", [Item]),
+            parse(Ts, [], [Item], Txn, Cmd);
+        false ->
+            %% Oops, end of the line
+            no
+    end;
+parse([{token, Tok} | Ts], Tree, [#{node_type := container} | _] = Acc, Txn, Cmd) ->
+    %% A token after a container. Expect it to match an entry in the Tree
+    case lookup(Tok, Tree) of
+        {ok, #{node_type := container} = Item} ->
+            Children = menu_item_children(Item, Txn, Cmd),
+            ?DBG("Adding Container Item in container = ~p~n", [Item]),
+            parse(Ts, Children, [Item | Acc], Txn, Cmd);
+        {ok, #{node_type := Leaf, type := Type} = Item} when Leaf == leaf; Leaf == leaf_list ->
+            %% Expecting a leaf value, possibly followed by more entries in the same
+            %% container. If it's an enum type keep going, otherwise keep the same possible future tree, but without this node
+            EnumTree = enum_values(Type),
+            Tree1 = remove(Tok, Tree),
+            ?DBG("Adding Leaf Item in container = ~p~n", [Item]),
+            parse_leaf(Ts, EnumTree, Tree1, Item, Acc, Txn, Cmd);
+        {ok, #{node_type := list} = Item} ->
+            %% Expecting a key value next. Children could be all entries in the list..
+            %% so ignore and deal with if we need completion
+            parse(Ts, [], [Item | Acc], Txn, Cmd);
+        false ->
+            %% Oops, end of the line
+            no
+    end;
+parse([{token, _Tok} | _] = Ts, Tree, [#{node_type := leaf, value := _Value}, #{node_type := container} = Container | Acc], Txn, Cmd) ->
+    %% Token after a leaf after a container when we also have the value
+    %% Backtrack to to fetch something else from the remaining children of this container
+    ?DBG("Skipping leaf value = ~p~n", [Container]),
+    parse(Ts, Tree, [Container | Acc], Txn, Cmd);
+parse([{token, _Tok} | Ts], Tree, [#{node_type := leaf, type := Type} = Leaf, #{node_type := container} = Container | Acc], Txn, Cmd) ->
+    %% Token after a leaf after a container. It's the value, we can discard it for completion purposes
+    %% Go back to to fetch something else from the remaining children of this container
+    ?DBG("Setting leaf value in container = ~p ~p ~n", [Leaf, Container]),
+    case enum_values(Type) of
+        false ->
+            parse(Ts, Tree, [Container | Acc], Txn, Cmd);
+        EnumValues ->
+            parse(Ts, EnumValues, [Leaf, Container | Acc], Txn, Cmd)
+    end;
+parse([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | Acc], Txn, Cmd) ->
+    %% Token after a leaf. This is the value. Just put it it in the leaf
+    %% Can this really happen - leaf not inside a container??
+    ?DBG("Setting leaf value = ~p~n", [Leaf]),
+    Leaf1 = Leaf#{value => Tok},
+    parse(Ts, Tree, [Leaf1 | Acc], Txn, Cmd);
+parse([space | Ts], Tree, Acc, Txn, Cmd) ->
+    %% We only track spaces for the last one, skip
+    ?DBG("Skipping space~n", []),
+    parse(Ts, Tree, Acc, Txn, Cmd).
+
+%% Parsing a leaf is a side excursion. We need to juggle two menus/trees:
+%% 1. Possible values of the leaf for enum alikes
+%% 2. The remaining menu items of a parent container that contains
+%%    multiple leafs.
+parse_leaf([{token, Tok}], [#{name := Tok} = Item], Tree, Item, _Acc, _Txn, _Cmd) ->
+    ?DBG("Expanding leaf value after Token ~p = ~p~nAcc = ~p~n", [Tok, [Item], _Acc]),
+    Menu = ecli:format_menu(Tree),
+    {yes, " ", Menu};
+parse_leaf([{token, _Tok}], [], Tree, _Item, _Acc, _Txn, _Cmd) ->
+    ?DBG("Expanding leaf value after Token ~p = ~p~nAcc = ~p~n", [_Tok, [_Item], _Acc]),
+    Menu = ecli:format_menu(Tree),
+    {yes, " ", Menu};
+parse_leaf([{token, Tok}], EnumValues, Tree, _Item, _Acc, _Txn, _Cmd) ->
+    Matches = filter_by_prefix(Tok, EnumValues),
+    ?DBG("Expanding leaf value after Token ~p = ~p Matches = ~p~n", [Tok, EnumValues, Matches]),
+    case Matches of
+        [] ->
+            no;
+        [#{name := Name}] when Name == Tok ->
+            Menu = ecli:format_menu(Tree),
+            {yes, " ", Menu};
+        [#{name := Name}] ->
+            {yes, chars_to_expand(Tok, Name), []};
+        _ ->
+            Chars = expand_menus(Tok, Matches),
+            Menu = ecli:format_menu(Matches),
+            {yes, Chars, Menu}
+    end;
+parse_leaf([space], [], _Tree, _Item, _Acc, _Txn, _Cmd) ->
+    no;
+parse_leaf([space], EnumValues, _Tree, _Item, _Acc, _Txn, _Cmd) ->
+    Menu = ecli:format_menu(EnumValues),
+    {yes, "", Menu};
+parse_leaf([{token, _Tok} | Ts], _, Tree, _Item, Acc, Txn, Cmd) ->
+    %% Value is the token, drop the leaf and carry on from parent container
+    ?DBG("Parsing leaf value after Token ~p = ~p~nAcc = ~p~n", [_Tok, [], Acc]),
+    parse(Ts, Tree, Acc, Txn, Cmd);
+parse_leaf([space | Ts], EnumValues, Tree, Item, Acc, Txn, Cmd) ->
+    %% We only track spaces for the last one, skip
+    ?DBG("Skipping space when expecting leaf ???~n", []),
+    parse_leaf(Ts, EnumValues, Tree, Item, Acc, Txn, Cmd).
+
+expand_after_token(_Tok, [], _Acc, _Txn, _Cmd) ->
+    %% No possible matches for our token
+    no;
+expand_after_token(_Tok, _Menu, [#{node_type := leaf, value := _Val} | _Acc], _Txn, _Cmd) ->
+    {yes, " ", []};
+expand_after_token(_Tok, _Menu, [#{node_type := leaf} | _Acc], _Txn, _Cmd) ->
+    {yes, " ", []};
+expand_after_token(Tok, MenuItems, _Acc, Txn, Cmd) ->
+    %% There are a number of possibly matching menu items.
+    Matches = filter_by_prefix(Tok, MenuItems),
+    case Matches of
+        [] ->
+            no;
+        [#{name := Name} = Item] when Name == Tok ->
+            Children = menu_item_children(Item, Txn, Cmd),
+            Menu = ecli:format_menu(Children),
+            {yes, " ", Menu};
+        [#{name := Name}] ->
+            {yes, chars_to_expand(Tok, Name), []};
+        _ ->
+            Chars = expand_menus(Tok, Matches),
+            Menu = ecli:format_menu(Matches),
+            {yes, Chars, Menu}
+    end.
+
+expand_after_space([], [#{node_type := leaf, value := _Val} | _Acc], _Txn, _Cmd) ->
+    %% This leaf has a value, but no peer items. End of the command
+    no;
+expand_after_space(Tree, [#{node_type := leaf, value := _Val} | _Acc], _Txn, _Cmd) ->
+     %% This leaf has a value. Show the remaining Menu items
+    Menu = ecli:format_menu(Tree),
+    {yes, "", Menu};
+expand_after_space(_Menu, [#{node_type := leaf, desc := Desc, type := Type} | _Acc], _Txn, _Cmd) ->
+    %% Leaf with no value. User needs to start putting in some effort here!
+    %% Help them out by showing the help text or enumerated values
+    case enum_values(Type) of
+        [] ->
+            {yes, "", ["\r\n", Desc, "\r\n"]};
+        Tree ->
+            Menu = ecli:format_menu(Tree),
+            {yes, "", Menu}
+    end;
+expand_after_space(_Menu, [#{node_type := leaf, desc := Desc} | _Acc], _Txn, _Cmd) ->
+    %% Leaf with no value or type. User needs to start putting in some effort here!
+    %% Help them out by showing the help text or enumerated values
+    {yes, "", ["\r\n", Desc, "\r\n"]};
+expand_after_space([#{node_type := container, name := OneName} = Item], _Acc, Txn, Cmd) ->
+    %% Ended after a container with just one possible child element, skip through and show the
+    %% next menu
+    Children = menu_item_children(Item, Txn, Cmd),
+    %% ?DBG("ecli_expand: after spc children = ~p~n",[Children]),
+    %% Only one - just fill it in for the user
+    Menu = ecli:format_menu(Children),
+    {yes, OneName ++ " ", Menu};
+expand_after_space(Tree, _Acc, _Txn, _Cmd) ->
+    %% Ending at a space, we got this far ok, show the next menu item if present
+    Menu = ecli:format_menu(Tree),
+    {yes, "", Menu}.
+
+enum_values(boolean) ->
+    [#{name => "true", desc => "True"},
+     #{name => "false", desc => "False"}];
+enum_values(_) ->
+    [].
+
+
+
 
 filter_by_prefix(_Str, []) ->
     [];
@@ -223,6 +232,16 @@ filter_by_prefix(Str, Menu) ->
 chars_to_expand("", Match) -> Match ++ " ";
 chars_to_expand(Str, Match) ->
     lists:sublist(Match, length(Str) + 1, length(Match) - 1) ++ " ".
+
+lookup(Name, [#{name := Name} = Item | _Tree]) ->
+    {ok, Item};
+lookup(Name, [#{} | Tree]) ->
+    lookup(Name, Tree);
+lookup(_, []) ->
+    false.
+
+remove(Tok, Tree) ->
+    lists:filter(fun(#{name := Name}) -> Name /= Tok end, Tree).
 
 %% Return the children of the current node.
 %%

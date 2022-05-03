@@ -8,8 +8,6 @@
 %%%-------------------------------------------------------------------
 -module(ecli_server).
 
--include("debug.hrl").
-
 -behaviour(gen_server).
 
 %% API
@@ -19,7 +17,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(SERVER, ?MODULE).
 
 -record(state,
         {
@@ -264,7 +261,12 @@ send_drv(Ops, Socket, Term0) ->
 
 send_raw(Bytes, #state{socket = Socket}) ->
     %% ?DBG("Sending raw ~p\r\n",[Bytes]),
-    ok = gen_tcp:send(Socket, Bytes).
+    case gen_tcp:send(Socket, Bytes) of
+        ok -> ok;
+        _Err ->
+            io:format("CLI Error sending bytes ~p~n",[Bytes]),
+            ok
+    end.
 
 %% Assumes that arg is a string
 %% Horizontal whitespace only.
