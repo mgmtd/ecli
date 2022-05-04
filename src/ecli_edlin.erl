@@ -91,6 +91,8 @@ insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
                     insert(Cs, Ed#edlin{line = Line, state = none,
                                         requests = Rs, history = History})
             end;
+        ctld_forward_delete_char when Bef == [] andalso Aft == [] ->
+            stop;
         {undefined,C} ->
             insert(Cs, Ed#edlin{state = none});
         Op ->
@@ -117,7 +119,7 @@ prefix_arg(N) -> N.
 %%  Map a character and a prefix to an action.
 key_map($\^A, none) -> beginning_of_line;
 key_map($\^B, none) -> backward_char;
-key_map($\^D, none) -> forward_delete_char;
+key_map($\^D, none) -> ctld_forward_delete_char;
 key_map($\^E, none) -> end_of_line;
 key_map($\^F, none) -> forward_char;
 key_map($\^H, none) -> backward_delete_char;
@@ -229,6 +231,8 @@ do_op({insert,C}, [Bef|Bef0], Aft, Rs) ->       % insert in middle of line
         [GC] -> {{[GC|Bef0],Aft},[{insert_chars, unicode,[C], Aft}|Rs]};
         _ -> {{[C,Bef|Bef0],Aft},[{insert_chars, unicode,[C], Aft}|Rs]}
     end;
+do_op(ctld_forward_delete_char, Bef, [GC|Aft], Rs) ->
+    {{Bef,Aft},[{delete_chars,gc_len(GC), Aft}|Rs]};
 do_op(forward_delete_char, Bef, [GC|Aft], Rs) ->
     {{Bef,Aft},[{delete_chars,gc_len(GC), Aft}|Rs]};
 do_op(backward_delete_char, [GC|Bef], Aft, Rs) ->

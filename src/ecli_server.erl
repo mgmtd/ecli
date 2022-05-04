@@ -246,7 +246,9 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
                 stop ->
                     gen_tcp:close(State#state.socket),
                     stop
-            end
+            end;
+        stop ->
+            stop
     end.
 
 
