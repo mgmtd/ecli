@@ -14,7 +14,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <term.h>
-// #include <curses.h>
 
 #define MAXLINE     4096
 
@@ -56,12 +55,18 @@ static void enableRawMode() {
    https://stackoverflow.com/questions/3324619/unix-domain-socket-using-datagram-communication-between-one-server-process-and */
 static int openUnixDomSocket() {
   int sock_fd;
-  char * server_filename = "/var/tmp/mgmtd.cli.socket";
+  char *server_path;
+  char *default_server_path = "/var/tmp/mgmtd.cli.socket";
 
   struct sockaddr_un server_addr;
   memset(&server_addr, 0, sizeof(server_addr));
   server_addr.sun_family = AF_UNIX;
-  strncpy(server_addr.sun_path, server_filename, 104); // XXX: should be limited to about 104 characters, system dependent
+
+  if ((server_path = getenv("ECLI_SOCKET_PATH")) == NULL) {
+    strncpy(server_addr.sun_path, default_server_path, 104); // XXX: should be limited to about 104 characters, system dependent
+  } else {
+    strncpy(server_addr.sun_path, server_path, 104);
+  }
 
   if ((sock_fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
     perror("create cli socket");
@@ -83,7 +88,7 @@ static int openUnixDomSocket() {
 static char *getstr(char* buf, char *str, int len) {
   strncpy(buf, str, len);
   buf += len;
-  strncpy(buf, ":", 1);
+  strcpy(buf, ":");
   buf++;
   if (tgetstr(str, &buf) !=0) {
     *(buf - 1) = ',';
@@ -96,9 +101,9 @@ static char *getstr(char* buf, char *str, int len) {
 
 /* Append tgetflag result to buffer */
 static char *getbool(char* buf, char *str, int len) {
-  strncpy(buf, str, len);
+  strcpy(buf, str);
   buf += len;
-  strncpy(buf, ":", 1);
+  strcpy(buf, ":");
   buf++;
   if (tgetflag(str)) {
     *buf = '1';
@@ -118,7 +123,8 @@ static char *getbool(char* buf, char *str, int len) {
 int main() {
   int sock_fd, maxfdp, val, stdineof;
   int istty;
-  int rows, cols;
+  int rows = 24;
+  int cols = 80;
   ssize_t n, nwritten;
   fd_set rset, wset;
   char to[MAXLINE], fr[MAXLINE];
@@ -163,7 +169,7 @@ int main() {
 
   snprintf(meta, MAXLINE-1, "cli:%d,%d,%d,%d,%s,", vsn, istty, rows, cols, term);
 
-  int pos = strnlen(meta, MAXLINE);
+  int pos = strlen(meta);
   char *setpos = meta + pos;
 
   /* Add new blank line */
@@ -228,7 +234,7 @@ int main() {
 
   *(setpos - 1) = 0;
 
-  write(sock_fd, meta, strnlen(meta, MAXLINE));
+  write(sock_fd, meta, strlen(meta));
 
   /* Straight from stevens */
   val = fcntl(sock_fd, F_GETFL, 0);
