@@ -140,6 +140,13 @@ parse_leaf([{token, Tok}], EnumValues, Tree, _Item, _Acc, _Txn, _Cmd) ->
             Menu = ecli:format_menu(Matches),
             {yes, Chars, Menu}
     end;
+parse_leaf([space], [], _Tree, #{node_type := leaf, desc := Desc}, _Acc, _Txn, _Cmd) ->
+    %% Leaf with no value or type. User needs to start putting in some effort here!
+    %% Help them out by showing the help text or enumerated values
+    {yes, "", ["\r\n", Desc, "\r\n"]};
+parse_leaf([space], EnumValues, _Tree, #{node_type := leaf}, _Acc, _Txn, _Cmd) ->
+    Menu = ecli:format_menu(EnumValues),
+    {yes, "", Menu};
 parse_leaf([space], [], _Tree, _Item, _Acc, _Txn, _Cmd) ->
     no;
 parse_leaf([space], EnumValues, _Tree, _Item, _Acc, _Txn, _Cmd) ->
@@ -200,8 +207,8 @@ expand_after_space(_Menu, [#{node_type := leaf, desc := Desc} | _Acc], _Txn, _Cm
     %% Leaf with no value or type. User needs to start putting in some effort here!
     %% Help them out by showing the help text or enumerated values
     {yes, "", ["\r\n", Desc, "\r\n"]};
-expand_after_space([#{node_type := container, name := OneName} = Item], _Acc, Txn, Cmd) ->
-    %% Ended after a container with just one possible child element, skip through and show the
+expand_after_space([#{name := OneName} = Item], _Acc, Txn, Cmd) ->
+    %% Ended at a container with just one possible child element, skip through and show the
     %% next menu
     Children = menu_item_children(Item, Txn, Cmd),
     %% ?DBG("ecli_expand: after spc children = ~p~n",[Children]),
