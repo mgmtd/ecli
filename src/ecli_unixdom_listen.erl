@@ -150,8 +150,13 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, State) ->
+    case State#state.listen_socket of
+        undefined ->
+            ok;
+        Sock ->
+            gen_tcp:close(Sock)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
