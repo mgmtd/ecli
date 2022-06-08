@@ -236,7 +236,10 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
                     ok = send_raw(Output, State),
                     Term = send_drv(Ops, State#state.socket, State#state.term),
                     {ok, Prompt} = CliMod:prompt(CliState),
-                    History = [FullLine | State#state.history],
+                    History = case FullLine of
+                                "" -> State#state.history;
+                                _-> [FullLine | State#state.history]
+                              end,
                     {Edlin, InitialOps} = ecli_edlin:start(Prompt, History),
                     Term1 = send_drv(InitialOps, State#state.socket, Term),
                     get_chars_loop(Cs, State#state{term = Term1,
