@@ -116,7 +116,7 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
             inet:setopts(Socket, [{active, once}]),
             {noreply, State#state{socket = Socket}};
         {error, _Reason} = Err ->
-            {stop, Err, State}
+            {stop, normal, State}
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false,
                                         ecli_mod = CliMod} = State) ->
