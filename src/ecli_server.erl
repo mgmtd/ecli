@@ -115,7 +115,8 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
             ecli_unixdom_listen:notify_connection_established(Lp),
             inet:setopts(Socket, [{active, once}]),
             {noreply, State#state{socket = Socket}};
-        {error, _Reason} = Err ->
+        {error, _Reason} ->
+            %% Listen socket closed during normal shutdown
             {stop, normal, State}
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false,

@@ -40,7 +40,7 @@ init([]) ->
                 },
     Child = #{id => ?MODULE,
               start => {ecli_unixdom_listen, start_link, []},
-              restart => permanent},
+              restart => transient},
     {ok, {SupFlags, [Child]} }.
 
 %%====================================================================
