@@ -251,6 +251,14 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
                     gen_tcp:close(State#state.socket),
                     stop
             end;
+        {cancel, Ops} ->
+            ok = send_raw("\r\n", State),
+            Term = send_drv(Ops, State#state.socket, State#state.term),
+            {ok, Prompt} = CliMod:prompt(State#state.ecli_state),
+            {Edlin, InitialOps} = ecli_edlin:start(Prompt, State#state.history),
+            Term1 = send_drv(InitialOps, State#state.socket, Term),
+            get_chars_loop([], State#state{term = Term1,
+                                           edlin = Edlin});
         stop ->
             stop
     end.
@@ -261,7 +269,11 @@ send_drv(Ops, Socket, Term0) ->
     %% ?DBG("Term before ~s\r\n",[ecli_term:print(Term0)]),
     {Bytes, Term} = ecli_term:send_ops(Ops, Term0),
     %% ?DBG("Term after ~s\r\n",[ecli_term:print(Term)]),
-    ok = gen_tcp:send(Socket, Bytes),
+    case gen_tcp:send(Socket, Bytes) of
+        ok -> ok;
+        Err ->
+            io:format("Err: ~p Sending ~p~n", [Err, Bytes])
+    end,
     inet:setopts(Socket, [{active, once}]),
     Term.
 

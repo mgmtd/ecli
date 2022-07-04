@@ -93,6 +93,8 @@ insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
             end;
         ctld_forward_delete_char when Bef == [] andalso Aft == [] ->
             stop;
+        cancel ->
+            {cancel, lists:reverse(Rs0, [{move_rel,cp_len(Aft)}, {crnl, "cancelled"}])};
         {undefined,C} ->
             insert(Cs, Ed#edlin{state = none});
         Op ->
@@ -136,6 +138,7 @@ key_map($\^Y, none) -> yank;
 key_map($\^W, none) -> backward_kill_word;
 key_map($\^p, none) -> prev_history;
 key_map($\^n, none) -> next_history;
+key_map($\^C, none) -> cancel;
 key_map($\e, none) -> meta;
 key_map($), Prefix) when Prefix =/= meta,
                          Prefix =/= search,

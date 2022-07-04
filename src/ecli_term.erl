@@ -93,6 +93,8 @@ send_op({delete_chars, N, Aft}, T) ->
     del_chars(N, Aft, T);
 send_op(crnl, T) ->
     {["\r\n[ok]\r\n"], T#term{lpos = 0, llen = 0}};
+send_op({crnl, Result}, T) ->
+    {["\r\n[", Result, "]\r\n"], T#term{lpos = 0, llen = 0}};
 send_op(beep, T) ->
     {[16#07], T}.
 
