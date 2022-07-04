@@ -20,25 +20,23 @@
           llen :: integer(),
           lpos :: integer(),
 
-          %% tgetent props from here
-          up :: binary(),             % Move cursor up 1
-          down :: binary(),           % Move cursor down 1
-          left :: binary(),           % Move cursor left 1
-          right :: binary(),          % Move cursor right 1
-          cl :: binary(),             % Clear screen and home cursor
-          cb :: binary(),             % Clear to beginning of line
-          ce :: binary(),             % Clear to end of line
-          dc :: binary(),             % Delete Character
-          dl :: binary(),             % Delete Line
-          ic :: binary(),             % Insert Character
-          ip :: binary(),             % Insert Padding after inserted
-          nw :: binary(),             % Insert newline (like crlf)
-          down_n :: fun((integer()) -> binary()),  % Down N lines
-          left_n :: fun((integer()) -> binary()), % Left N Chars
-          right_n :: fun((integer()) -> binary()), % Right N chars
-          up_n :: fun((integer()) -> binary()), % Up N chars
-          ed:: binary(),                        % Clear to end of line
-          xn :: boolean()              % Newline ignored after 80 cols
+          %% ANSI terminal control sequences
+          up    = <<"\e[A">> :: binary(),             % Move cursor up 1
+          down  = <<"\e[B">> :: binary(),           % Move cursor down 1
+          right = <<"\e[C">> :: binary(),          % Move cursor right 1
+          left  = <<"\e[D">> :: binary(),           % Move cursor left 1
+          cl    = <<"\e[H\e[2J">> :: binary(),             % Clear screen and home cursor
+          cb    = <<"\e[1K">> :: binary(),             % Clear to beginning of line
+          ce    = <<"\e[K">> :: binary(),             % Clear to end of line
+          dc    = <<"\e[P">> :: binary(),             % Delete Character
+          dl    = <<"\e[M">> :: binary(),             % Delete Line
+          %%ic :: binary(),             % Insert Character
+          %%ip :: binary(),             % Insert Padding after inserted
+          %%nw :: binary(),             % Insert newline (like crlf)
+          up_n    = fun(C) -> [<<"\e[">>,integer_to_list(C),"A"] end :: fun((integer()) -> binary()), % Up N chars
+          down_n  = fun(C) -> [<<"\e[">>,integer_to_list(C),"B"] end :: fun((integer()) -> binary()),  % Down N lines
+          right_n = fun(C) -> [<<"\e[">>,integer_to_list(C),"C"] end :: fun((integer()) -> binary()), % Right N chars
+          left_n  = fun(C) -> [<<"\e[">>,integer_to_list(C),"D"] end :: fun((integer()) -> binary()) % Left N Chars
         }).
 
 print(#term{llen = Llen, lpos = Lpos}) ->
@@ -48,7 +46,7 @@ print(#term{llen = Llen, lpos = Lpos}) ->
 -spec new(binary()) -> {ok, {iolist(), #term{}}} | {error, term()}.
 new(MetaLine) ->
     case binary:split(MetaLine, <<",">>, [global]) of
-        [<<"cli:1">>, <<Isatty>>, Rows, Cols, Term | Termcaps] ->
+        [<<"cli:1">>, <<Isatty>>, Rows, Cols, Term] ->
             CliTerm = #term{
                          rows = parse_int(Rows),
                          cols = parse_int(Cols),
@@ -57,58 +55,15 @@ new(MetaLine) ->
                          lpos = 0,           % current cursor position
                          term = Term
                         },
-            T = parse_termcaps(Termcaps, CliTerm),
-            {ok, T};
+            {ok, CliTerm};
         _ ->
             {error, {invalid, MetaLine}}
     end.
 
 
-%% -------------------------------------------------------------------
-%% Parse the termcap definitions provided in the data the cli program
-%% sends immediately after it connects.
-%%
-%% Definitions are comma separated using two char termcap
-%% names. e.g. up, down, left, right ops could look like:
-%%
-%% <<"up:\e[A,do:\n,le:\b,nd:\e[C">>
-%% -------------------------------------------------------------------
-parse_termcaps(Termcaps, CliTerm) ->
-    lists:foldl(fun(Tc, CT) -> parse_termcap(Tc, CT) end, CliTerm, Termcaps).
-
-parse_termcap(TC, T) when is_binary(TC) ->
-    [Entry, Val] = binary:split(TC, <<":">>),
-    parse_termcap({binary_to_list(Entry), Val}, T);
-parse_termcap({_, <<>>}, T) -> T;
-parse_termcap({"up", Cmd}, T) -> T#term{up = Cmd};
-parse_termcap({"do", Cmd}, T) -> T#term{down = Cmd};
-parse_termcap({"le", Cmd}, T) -> T#term{left = Cmd};
-parse_termcap({"nd", Cmd}, T) -> T#term{right = Cmd};
-parse_termcap({"cl", Cmd}, T) -> T#term{cl = Cmd};
-parse_termcap({"cb", Cmd}, T) -> T#term{cb = Cmd};
-parse_termcap({"ce", Cmd}, T) -> T#term{ce = Cmd};
-parse_termcap({"dc", Cmd}, T) -> T#term{dc = Cmd};
-parse_termcap({"dl", Cmd}, T) -> T#term{dl = Cmd};
-parse_termcap({"ic", Cmd}, T) -> T#term{ic = Cmd};
-parse_termcap({"ip", Cmd}, T) -> T#term{ip = Cmd};
-parse_termcap({"nw", Cmd}, T) -> T#term{nw = Cmd};
-parse_termcap({"DO", Cmd}, T) -> T#term{down_n = parse_param(Cmd)};
-parse_termcap({"LE", Cmd}, T) -> T#term{left_n = parse_param(Cmd)};
-parse_termcap({"RI", Cmd}, T) -> T#term{right_n = parse_param(Cmd)};
-parse_termcap({"UP", Cmd}, T) -> T#term{up_n = parse_param(Cmd)};
-parse_termcap({"ed", Cmd}, T) -> T#term{ed = Cmd};
-parse_termcap({"xn", Int}, T) -> T#term{xn = parse_bool(Int)};
-parse_termcap(_, T) -> T.
-
-
-parse_param(<<"\e[%p1%d", Op>>) ->
-    fun(C) -> [<<"\e[">>,integer_to_list(C), Op] end.
-
 parse_int(Bin) -> list_to_integer(binary_to_list(Bin)).
 
-parse_bool(<<"0">>) -> false;
 parse_bool($0) -> false;
-parse_bool(<<"1">>) -> true;
 parse_bool($1) -> true.
 
 %%%-------------------------------------------------------------------

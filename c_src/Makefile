@@ -14,9 +14,8 @@ C_SRC_OUTPUT ?= $(CURDIR)/../priv/$(PROJECT)
 UNAME_SYS := $(shell uname -s)
 ifeq ($(UNAME_SYS), Darwin)
 	CC ?= cc
-	CFLAGS ?= -O3 -std=c99 -arch x86_64 -arch arm64 -finline-functions -Wall -Wmissing-prototypes
-	CXXFLAGS ?= -O3 -arch x86_64 -arch arm64 -finline-functions -Wall
-	LDFLAGS ?= -arch x86_64 -arch arm64
+	CFLAGS ?= -O3 -std=c99 -finline-functions -Wall -Wmissing-prototypes
+	CXXFLAGS ?= -O3 -finline-functions -Wall
 else ifeq ($(UNAME_SYS), FreeBSD)
 	CC ?= cc
 	CFLAGS ?= -O3 -std=c99 -finline-functions -Wall -Wmissing-prototypes
@@ -26,8 +25,6 @@ else ifeq ($(UNAME_SYS), Linux)
 	CFLAGS ?= -O3 -std=c99 -finline-functions -Wall -Wmissing-prototypes
 	CXXFLAGS ?= -O3 -finline-functions -Wall
 endif
-
-LDLIBS += -lncurses
 
 # Verbosity.
 

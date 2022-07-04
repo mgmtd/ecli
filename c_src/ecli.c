@@ -13,7 +13,6 @@
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <term.h>
 
 #define MAXLINE     4096
 
@@ -42,7 +41,7 @@ static void enableRawMode() {
 
   struct termios raw = orig_termios;
   raw.c_iflag &= ~(ICRNL | INLCR | INPCK | ISTRIP | IXON);
-  raw.c_oflag &= ~(OPOST | ICRNL | INLCR);
+  raw.c_oflag &= ~(OPOST | OCRNL | ONLCR);
   raw.c_cflag |= (CS8);
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
   raw.c_cc[VMIN] = 0;
@@ -82,43 +81,6 @@ static int openUnixDomSocket() {
   return sock_fd;
 
 }
-
-
-/* Append tgetstr result to buffer */
-static char *getstr(char* buf, char *str, int len) {
-  strncpy(buf, str, len);
-  buf += len;
-  strcpy(buf, ":");
-  buf++;
-  if (tgetstr(str, &buf) !=0) {
-    *(buf - 1) = ',';
-  } else {
-    *(buf) = ',';
-    buf++;
-  }
-  return buf;
-}
-
-/* Append tgetflag result to buffer */
-static char *getbool(char* buf, char *str, int len) {
-  strcpy(buf, str);
-  buf += len;
-  strcpy(buf, ":");
-  buf++;
-  if (tgetflag(str)) {
-    *buf = '1';
-    buf++;
-    *buf = ',';
-    buf++;
-  } else {
-    *buf = '0';
-    buf++;
-    *buf = ',';
-    buf++;
-  }
-  return buf;
-}
-
 
 int main() {
   int sock_fd, maxfdp, val, stdineof;
@@ -160,79 +122,7 @@ int main() {
     term = "xterm";
   }
 
-  // Get a selection of terminfo entries the server can use to drive
-  // our raw terminal
-  if (tgetent(fr, term) <=0) {
-    perror("tgetent");
-    exit(1);
-  }
-
-  snprintf(meta, MAXLINE-1, "cli:%d,%d,%d,%d,%s,", vsn, istty, rows, cols, term);
-
-  int pos = strlen(meta);
-  char *setpos = meta + pos;
-
-  /* Add new blank line */
-  setpos = getstr(setpos, "al", 2);
-
-  /* Up command */
-  setpos = getstr(setpos, "up", 2);
-
-  /* Down command */
-  setpos = getstr(setpos, "do", 2);
-
-  /* Left command */
-  setpos = getstr(setpos, "le", 2);
-
-  /* Right command (non destructive) */
-  setpos = getstr(setpos, "nd", 2);
-
-  /* Clear screen and home cursor */
-  setpos = getstr(setpos, "cl", 2);
-
-  /* Clear to beginning of line */
-  setpos = getstr(setpos, "cb", 2);
-
-  /* Clear to end of line */
-  setpos = getstr(setpos, "ce", 2);
-
-  /* cursor to horiz pos */
-  setpos = getstr(setpos, "ch", 2);
-
-  /* Delete Character */
-  setpos = getstr(setpos, "dc", 2);
-
-  /* Delete Line */
-  setpos = getstr(setpos, "dl", 2);
-
-  /* Insert Character */
-  setpos = getstr(setpos, "ic", 2);
-
-  /* Insert Padding after inserted character */
-  setpos = getstr(setpos, "ip", 2);
-
-  /* Insert newline (like crlf) */
-  setpos = getstr(setpos, "nw", 2);
-
-  /* Down #1 lines */
-  setpos = getstr(setpos, "DO", 2);
-
-  /* Left #1 chars */
-  setpos = getstr(setpos, "LE", 2);
-
-  /* Right #1 chars */
-  setpos = getstr(setpos, "RI", 2);
-
-  /* UP #1 lines */
-  setpos = getstr(setpos, "UP", 2);
-
-  /* Clear to end of line */
-  setpos = getstr(setpos, "ed", 2);
-
-  /* Newline ignored after 80 cols */
-  setpos = getbool(setpos, "xn", 2);
-
-  *(setpos - 1) = 0;
+  snprintf(meta, MAXLINE-1, "cli:%d,%d,%d,%d,%s", vsn, istty, rows, cols, term);
 
   write(sock_fd, meta, strlen(meta));
 
@@ -280,7 +170,6 @@ int main() {
           shutdown(sock_fd, SHUT_WR);   /* send FIN */
 
       } else {
-        // fprintf(stderr, "read %d bytes from stdin\r\n", n);
         toiptr += n;     /* # just read */
         FD_SET(sock_fd, &wset); /* try and write to socket below */
       }
@@ -292,7 +181,6 @@ int main() {
           perror("read error on socket");
 
       } else if (n == 0) {
-        // fprintf(stderr, "EOF on socket\r\n");
         if (stdineof)
           return 0;     /* normal termination */
         else {
@@ -304,7 +192,6 @@ int main() {
         }
 
       } else {
-        // fprintf(stderr, "read %d bytes from socket\r\n", n);
         friptr += n;     /* # just read */
         FD_SET(STDOUT_FILENO, &wset);     /* try and write below */
       }
@@ -318,7 +205,6 @@ int main() {
         }
 
       } else {
-        // fprintf(stderr, "wrote %d bytes to stdout\r\n", nwritten);
         froptr += nwritten; /* # just written */
         if (froptr == friptr)
           froptr = friptr = fr;   /* back to beginning of buffer */
@@ -331,7 +217,6 @@ int main() {
           perror("write error to socket");
 
       } else {
-        // fprintf(stderr, "wrote %d bytes to socket\r\n", nwritten);
         tooptr += nwritten; /* # just written */
         if (tooptr == toiptr) {
           toiptr = tooptr = to;   /* back to beginning of buffer */
@@ -343,18 +228,3 @@ int main() {
   }
 }
 
-/*
-while (1) {
-    char c = '\0';
-    if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) die("read");
-    if (iscntrl(c)) {
-      printf("%d\r\n", c);
-    } else {
-      printf("%d ('%c')\r\n", c, c);
-    }
-    if (c == 'q') break;
-  }
-
-  return 0;
-}
-*/
