@@ -13,6 +13,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define MAXLINE     4096
 
