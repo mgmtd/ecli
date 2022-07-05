@@ -9,7 +9,7 @@
 -module(ecli_term).
 
 
--export([new/1, print/1, send_ops/2]).
+-export([new/1, sigwinch/3, print/1, send_ops/2]).
 
 -record(term,
         {
@@ -66,6 +66,9 @@ parse_int(Bin) -> list_to_integer(binary_to_list(Bin)).
 parse_bool($0) -> false;
 parse_bool($1) -> true.
 
+sigwinch(Rows, Cols, Term) ->
+    Term#term{rows = Rows, cols = Cols}.
+
 %%%-------------------------------------------------------------------
 %% All op handling code below converted to erlang from
 %% erts/emulator/drivers/unix/ttsl_drv.c. Not a great match because in
@@ -111,7 +114,7 @@ put_chars(Chars, #term{lpos = Lpos, llen = Llen} = T) ->
 move_rel(N, #term{lpos = Lpos, llen = Llen} = T) ->
     %% Step forwards or backwards over the buffer.
     Npos = step_over_chars(N, Lpos, Llen),
-    %% io:format("move_rel by:~p NewPos:~p\r\n",[N, Npos]),
+    %% io:format("move_rel by:~p Lpos:~p Llen: ~p NewPos:~p\r\n",[N, Lpos, Llen, Npos]),
 
     %% Calculate move, updates pointers and move the cursor.
     move_cursor(Lpos, Npos, T).
@@ -119,7 +122,7 @@ move_rel(N, #term{lpos = Lpos, llen = Llen} = T) ->
 move_cursor(From_pos, To_pos, #term{cols = Cols} = Term) ->
     From_col = cp_pos_to_col(From_pos),
     To_col = cp_pos_to_col(To_pos),
-    %% io:format("move_cursor From = ~p To = ~p ~p\r\n",[From_col, To_col, Cols]),
+    %% io:format("move_cursor From = ~p To = ~p ~p\r\n",[{From_pos, From_col}, {To_pos, To_col}, Cols]),
 
     Dc = col(To_col, Cols) - col(From_col, Cols),
     Dl = line(To_col, Cols) - line(From_col, Cols),

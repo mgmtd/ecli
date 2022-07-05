@@ -147,22 +147,28 @@ handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
     %% current line, ctrl chars affect the current line in various
     %% ways.
 
-    %% Convert Data from UTF-8 binary (FIXME - other charsets?)
-    %% dealing with partial character boundaries
+
     Bin = case Buf of
               <<>> -> Data;
               _ -> <<Buf/binary, Data/binary>>
           end,
-    {CharList, Buf1} = case unicode:characters_to_list(Bin, utf8) of
+    %% SIGWINCH will cause the ecli program to send us 0 followed by the new
+    %% terminal size. There may be multiple in a packet. Strip them all
+    %% out before passing the user input to the next step
+    {Bin0, Term1, PartSigwinch} = process_sigwinch(Bin, State#state.term),
+
+    %% Convert Data from UTF-8 binary (FIXME - other charsets?)
+    %% dealing with partial character boundaries
+    {CharList, Buf1} = case unicode:characters_to_list(Bin0, utf8) of
                            {error, Chars, _} ->
-                               {Chars, <<>>};
-                           {incomplete, Chars, Tail} ->
-                               {Chars, Tail};
+                               {Chars, PartSigwinch};
+                           {incomplete, Chars, Tail } ->
+                               {Chars, <<Tail/binary, PartSigwinch/binary>>};
                            Chars ->
-                               {Chars, <<>>}
+                               {Chars, PartSigwinch}
                        end,
 
-    case get_chars_loop(CharList, State) of
+    case get_chars_loop(CharList, State#state{term = Term1}) of
         {ok, State1} ->
             {noreply, State1#state{buf = Buf1}};
         stop ->
@@ -200,6 +206,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+%% Remove all sigwinch entries in the received data, keeping the final one
+%% as the new terminal size. If we got part of a sigwinch entry return it
+%% to be placed back in the read buffer.
+process_sigwinch(Bin, Term) ->
+    case binary:match(Bin, <<0>>) of
+        nomatch ->
+            {Bin, Term, <<>>};
+        {Start, 1} ->
+            if size(Bin) - Start >= 12 ->
+                    %% We have a full sigwinch update
+                    {PreData, SigWinchPre} = erlang:split_binary(Bin, Start),
+                    {SigWinch, Trailing} = erlang:split_binary(SigWinchPre, 12),
+                    {Rows, Cols} = parse_sigwinch(SigWinch),
+                    process_sigwinch(<<PreData/binary, Trailing/binary>>, ecli_term:sigwinch(Rows, Cols, Term));
+                true ->
+                    %% Partial Sigwinch update
+                    {PreData, PartSigWinch} = erlang:split_binary(Bin, Start),
+                    {PreData, Term, PartSigWinch}
+            end
+    end.
+
+parse_sigwinch(<<0, RowsBin:5/binary, ColsBin:5/binary, 0>>) ->
+    {list_to_integer(binary_to_list(RowsBin)), list_to_integer(binary_to_list(ColsBin))}.
 
 get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
     case ecli_edlin:insert(CharList, State#state.edlin) of

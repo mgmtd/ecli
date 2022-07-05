@@ -79,7 +79,9 @@ static int openUnixDomSocket() {
   }
 
   return sock_fd;
+}
 
+static void signal_handler(int signal) {
 }
 
 int main() {
@@ -115,6 +117,8 @@ int main() {
 
     rows = ws.ws_row;
     cols = ws.ws_col;
+
+    signal(SIGWINCH, signal_handler);
   }
 
   term = getenv("TERM");
@@ -155,7 +159,7 @@ int main() {
 
     select(maxfdp, &rset, &wset, NULL, NULL);
 
-
+    // Read from STDIN
     if (FD_ISSET(STDIN_FILENO, &rset)) {
       if ( (n = read(STDIN_FILENO, toiptr, &to[MAXLINE] - toiptr)) < 0) {
         if (errno != EWOULDBLOCK) {
@@ -164,17 +168,38 @@ int main() {
         }
 
       } else if (n == 0) {
-        fprintf(stderr, "EOF on stdin\r\n");
-        stdineof = 1;   /* all done with stdin */
-        if (tooptr == toiptr)
-          shutdown(sock_fd, SHUT_WR);   /* send FIN */
-
+        if (errno == EINTR) {
+          // Likely SIGWINCH cancelled our select.
+          // Rather than send to the socket direct from the signal handler
+          // append our magic SIGWINCH string to other buffered data towards the server
+          struct winsize ws;
+          if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) < 0) {
+            perror("window size");
+            exit(1);
+          }
+          // If there is enough space in 'to' write a magic SIGWINCH string
+          // It's not very easy for a user to type a 0, so use it to start and end the control seq
+          if ((&to[MAXLINE] - toiptr) > 12) {
+            *toiptr = 0;
+            toiptr++;
+            snprintf(toiptr, 11, "%05d%05d", ws.ws_row, ws.ws_col);
+            toiptr += 11;
+            FD_SET(sock_fd, &wset); /* try and write to socket below */
+          }
+        } else {
+          fprintf(stderr, "EOF on stdin\r\n");
+          stdineof = 1;   /* all done with stdin */
+          if (tooptr == toiptr)
+            shutdown(sock_fd, SHUT_WR);   /* send FIN */
+        }
       } else {
         toiptr += n;     /* # just read */
         FD_SET(sock_fd, &wset); /* try and write to socket below */
       }
     }
 
+    // Read data from the socket - will be written to STDOUT later on
+    // when STDOUT is ready to receive more data
     if (FD_ISSET(sock_fd, &rset)) {
       if ( (n = read(sock_fd, friptr, &fr[MAXLINE] - friptr)) < 0) {
         if (errno != EWOULDBLOCK)
@@ -197,6 +222,7 @@ int main() {
       }
     }
 
+    // Write data collected from the socket and buffered in 'fr' to STDOUT
     if (FD_ISSET(STDOUT_FILENO, &wset) && ((n = friptr - froptr) > 0)) {
       if ( (nwritten = write(STDOUT_FILENO, froptr, n)) < 0) {
         if (errno != EWOULDBLOCK) {
@@ -211,6 +237,7 @@ int main() {
       }
     }
 
+    // Write data collected from the STDIN and buffered in 'to' to the socket
     if (FD_ISSET(sock_fd, &wset) && ((n = toiptr - tooptr) > 0)) {
       if ( (nwritten = write(sock_fd, tooptr, n)) < 0) {
         if (errno != EWOULDBLOCK)
