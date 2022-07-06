@@ -12,11 +12,15 @@ permissions:
 jobs:
 
   build:
+    strategy:
+      matrix:
+        otp-version: [22.3.4.9, 23.3.4.5, 24.1.3, 25.0.2, latest]
+        os: [ubuntu-latest, ubuntu-18.04, ubuntu-20.04, ubuntu-22.04]
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.otp-version }}
 
     container:
-      image: erlang:22.0.7
+      image: erlang:${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
