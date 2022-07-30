@@ -66,11 +66,11 @@ execute(CmdStr, #cli_juniper{mode = configuration} = J) ->
 operational_menu() ->
     [#cmd{name = "show",
           desc = "Show commands",
-          action = fun(J, Item, _Value) -> show_operational(J, Item) end,
+          action = fun(J, Item) -> show_operational(J, Item) end,
           children = fun() -> operational_show_menu() end},
      #cmd{name = "configure",
           desc = "Enter configuration mode",
-          action = fun(J, _, _) -> enter_config_mode(J) end},
+          action = fun(J, _) -> enter_config_mode(J) end},
      #cmd{name = "colose",
           desc = "Close session",
           action = fun(J) -> enter_config_mode(J) end}].
@@ -78,25 +78,25 @@ operational_menu() ->
 operational_show_menu() ->
     [#cmd{name = "status",
           desc = "Status summary",
-          action = fun(J, Item, _) -> show_status(J, Item) end},
+          action = fun(J, Item) -> show_status(J, Item) end},
      #cmd{name = "sockets",
           desc = "Open sockets",
-          action = fun(J, Item, _) -> show_status(J, Item) end},
+          action = fun(J, Item) -> show_status(J, Item) end},
      #cmd{name = "interface",
           desc = "Interface status",
-          action = fun(J, Item, _) -> show_interface_status(J, Item) end}].
+          action = fun(J, Item) -> show_interface_status(J, Item) end}].
 
 configuration_menu() ->
     [#cmd{name = "show",
           desc = "Show configuration",
           children = fun() -> configuration_tree() end,
-          action = fun(J, Item, _) -> show_interface_status(J, Item) end},
+          action = fun(J, Item) -> show_interface_status(J, Item) end},
      #cmd{name = "set",
           desc = "Set a configuration parameter",
-          action = fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end},
+          action = fun(Txn, Path) -> cfg_set(Txn, Path, Value) end},
      #cmd{name = "exit",
           desc = "Exit configuration mode",
-          action = fun(J, _, _) -> exit_config_mode(J) end}].
+          action = fun(J, _) -> exit_config_mode(J) end}].
 
 %%--------------------------------------------------------------------
 %% Action implementations
@@ -159,10 +159,10 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
     case ecli:lookup(CmdStr, Menu, Txn) of
         {error, Reason} ->
             {ok, Reason, J};
-        {ok, Cmd, Path, Value} ->
-            io:format("Got item ~p~n", [{Cmd, Path, Value}]),
+        {ok, Cmd, Path} ->
+            io:format("Got item ~p~n", [{Cmd, Path}]),
             #{action := Action} = lists:last(Cmd),
-            case catch Action(J, Path, Value) of
+            case catch Action(J, Path) of
                 {'EXIT', Reason} ->
                     io:format("Executing configuration exit ~p~n", [Reason]),
                     {ok, "Error executing command", J};
