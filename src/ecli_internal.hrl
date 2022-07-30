@@ -7,19 +7,13 @@
 %%% Created : 17 Sep 2019 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
 
--record(cli_sequence,
-        {
-         seq = []
-        }).
+%% -define(DEBUG, 1).
 
--record(cli_tree,
-        {
-         tree_fun,
-         pipe_cmds = [],
-         add_list_items = false
-        }).
+-ifdef(DEBUG).
+-define(DBG(DATA), io:format(user, "[~p:~p] ~p~n",[?MODULE, ?LINE, DATA])).
+-define(DBG(FORMAT, ARGS), io:format(user, "[~p:~p] " ++ FORMAT,[?MODULE, ?LINE] ++ ARGS)).
+-else.
+-define(DBG(DATA), ok).
+-define(DBG(FORMAT, ARGS), ok).
+-endif.
 
--record(cli_value,
-        {
-         value_fun
-        }).

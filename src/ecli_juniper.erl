@@ -8,18 +8,13 @@
 %%%-------------------------------------------------------------------
 -module(ecli_juniper).
 
--export([init/0,
-         banner/1,
-         prompt/1,
-         expand/2,
-         execute/2
-        ]).
+-export([init/0, banner/1, prompt/1, expand/2, execute/2]).
+
+-include_lib("ecli/include/ecli.hrl").
 
 -record(cli_juniper,
-        {
-         mode = operational,
-         user_txn             % Transaction store for command sequences that need one
-        }).
+        {mode = operational,
+         user_txn}).             % Transaction store for command sequences that need one
 
 %%--------------------------------------------------------------------
 %% CLI behaviour mandatory callbacks
@@ -28,23 +23,24 @@ init() ->
     {ok, #cli_juniper{}}.
 
 banner(#cli_juniper{}) ->
-    {ok, "\r\nWelcome to the Juniper style CLI\r\n
-Hit TAB, SPC or ? at any time to see available options\r\n\r\n"}.
+    {ok,
+     "\r\nWelcome to the Juniper style CLI\r\n\nHit TAB, SPC or ? "
+     "at any time to see available options\r\n\r\n"}.
 
 prompt(#cli_juniper{mode = Mode}) ->
-    Suffix = case Mode of
-                 operational ->
-                     "> ";
-                 configuration ->
-                     "# "
-             end,
+    Suffix =
+        case Mode of
+            operational ->
+                "> ";
+            configuration ->
+                "# "
+        end,
     case inet:gethostname() of
         {ok, Hostname} ->
-            {ok, Hostname ++  Suffix};
+            {ok, Hostname ++ Suffix};
         _ ->
             {ok, Suffix}
     end.
-
 
 expand([], #cli_juniper{mode = operational} = J) ->
     {no, [], ecli:format_menu(operational_menu()), J};
@@ -54,87 +50,53 @@ expand(Chars, #cli_juniper{mode = operational} = J) ->
 expand([], #cli_juniper{mode = configuration} = J) ->
     {no, [], ecli:format_menu(configuration_menu()), J};
 expand(Chars, #cli_juniper{mode = configuration} = J) ->
-    io:format("expand config ~p~n",[Chars]),
+    io:format("expand config ~p~n", [Chars]),
     match_menu_item(Chars, configuration_menu(), J).
 
 execute(CmdStr, #cli_juniper{mode = operational} = J) ->
-    io:format("Executing operational Command ~p~n",[CmdStr]),
+    io:format("Executing operational Command ~p~n", [CmdStr]),
     execute_menu_item(CmdStr, operational_menu(), J);
 execute(CmdStr, #cli_juniper{mode = configuration} = J) ->
-    io:format("Executing configuration Command ~p~n",[CmdStr]),
+    io:format("Executing configuration Command ~p~n", [CmdStr]),
     execute_menu_item(CmdStr, configuration_menu(), J).
-
-
 
 %%--------------------------------------------------------------------
 %% Menu definitions
 %%--------------------------------------------------------------------
 operational_menu() ->
-    [#{role => cmd,
-       node_type => container,
-       name => "show",
-       desc => "Show commands",
-       action => fun(J, Item, _Value) ->
-                         show_operational(J, Item)
-                 end,
-       children => fun() -> operational_show_menu() end
-      },
-     #{role => cmd,
-       node_type => leaf,
-       name => "configure",
-       desc => "Enter configuration mode",
-       action => fun(J, _, _) -> enter_config_mode(J) end
-      },
-     #{role => cmd,
-       node_type => leaf,
-       name => "colose",
-       desc => "Close session",
-       action => fun(J) -> enter_config_mode(J) end
-      }
-    ].
+    [#cmd{name = "show",
+          desc = "Show commands",
+          action = fun(J, Item, _Value) -> show_operational(J, Item) end,
+          children = fun() -> operational_show_menu() end},
+     #cmd{name = "configure",
+          desc = "Enter configuration mode",
+          action = fun(J, _, _) -> enter_config_mode(J) end},
+     #cmd{name = "colose",
+          desc = "Close session",
+          action = fun(J) -> enter_config_mode(J) end}].
 
 operational_show_menu() ->
-    [#{role => cmd,
-       node_type => leaf,
-       name => "status",
-       desc => "Status summary",
-       action => fun(J, Item, _) -> show_status(J, Item) end
-      },
-     #{role => cmd,
-       node_type => leaf,
-       name => "sockets",
-       desc => "Open sockets",
-       action => fun(J, Item, _) -> show_status(J, Item) end
-      },
-     #{role => cmd,
-       node_type => leaf,
-       name => "interface",
-       desc => "Interface status",
-       action => fun(J, Item, _) -> show_interface_status(J, Item) end
-      }
-    ].
+    [#cmd{name = "status",
+          desc = "Status summary",
+          action = fun(J, Item, _) -> show_status(J, Item) end},
+     #cmd{name = "sockets",
+          desc = "Open sockets",
+          action = fun(J, Item, _) -> show_status(J, Item) end},
+     #cmd{name = "interface",
+          desc = "Interface status",
+          action = fun(J, Item, _) -> show_interface_status(J, Item) end}].
 
 configuration_menu() ->
-    [#{role => cmd,
-       node_type => container,
-       name => "show",
-       desc => "Show configuration",
-       children => fun() -> configuration_tree() end,
-       action => fun(J, Item, _) -> show_interface_status(J, Item) end
-      },
-     #{role => cmd,
-       node_type => container,
-       name => "set",
-       desc => "Set a configuration parameter",
-       action => fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end
-      },
-     #{role => cmd,
-       node_type => leaf,
-       name => "exit",
-       desc => "Exit configuration mode",
-       action => fun(J, _, _) -> exit_config_mode(J) end
-      }
-    ].
+    [#cmd{name = "show",
+          desc = "Show configuration",
+          children = fun() -> configuration_tree() end,
+          action = fun(J, Item, _) -> show_interface_status(J, Item) end},
+     #cmd{name = "set",
+          desc = "Set a configuration parameter",
+          action = fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end},
+     #cmd{name = "exit",
+          desc = "Exit configuration mode",
+          action = fun(J, _, _) -> exit_config_mode(J) end}].
 
 %%--------------------------------------------------------------------
 %% Action implementations
@@ -153,12 +115,11 @@ show_interface_status(#cli_juniper{} = J, _Item) ->
     {ok, "Interface statuses\r\n", J}.
 
 show_operational(#cli_juniper{user_txn = _Txn}, Item) ->
-    io:format("Executing show operational ~p~n",[Item]),
+    io:format("Executing show operational ~p~n", [Item]),
     {ok, "Operational statuses\r\n"}.
 
 configuration_tree() ->
     [].
-
 
 cfg_set(_Txn, _Path, _Value) ->
     {ok, "Set OK\r\n"}.
@@ -199,11 +160,11 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
         {error, Reason} ->
             {ok, Reason, J};
         {ok, Cmd, Path, Value} ->
-            io:format("Got item ~p~n",[{Cmd, Path, Value}]),
+            io:format("Got item ~p~n", [{Cmd, Path, Value}]),
             #{action := Action} = lists:last(Cmd),
             case catch Action(J, Path, Value) of
                 {'EXIT', Reason} ->
-                    io:format("Executing configuration exit ~p~n",[Reason]),
+                    io:format("Executing configuration exit ~p~n", [Reason]),
                     {ok, "Error executing command", J};
                 {ok, Result} ->
                     {ok, Result, J};
@@ -215,6 +176,7 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
     end.
 
 -ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
 
 full_expansion_top_level_test_() ->
@@ -230,17 +192,16 @@ full_expansion_multi_chars_top_level_test_() ->
 no_match_top_level_test_() ->
     {ok, J} = init(),
     Result = expand("x", J),
-    ?_assertMatch( {no, "", [], #cli_juniper{mode = operational}}, Result).
+    ?_assertMatch({no, "", [], #cli_juniper{mode = operational}}, Result).
 
 partial_match_multiple_test_() ->
     {ok, J} = init(),
     Result = expand("c", J),
-    ?_assertMatch({yes, "o", ["\r\n", [_,_]], #cli_juniper{mode = operational}}, Result).
+    ?_assertMatch({yes, "o", ["\r\n", [_, _]], #cli_juniper{mode = operational}}, Result).
 
 add_space_top_level_test_() ->
     {ok, J} = init(),
     Result = expand("show", J),
-    ?_assertMatch({yes, " ",  ["\r\n", [_,_,_]], #cli_juniper{mode = operational}}, Result).
-
+    ?_assertMatch({yes, " ", ["\r\n", [_, _, _]], #cli_juniper{mode = operational}}, Result).
 
 -endif.

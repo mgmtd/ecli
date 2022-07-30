@@ -8,14 +8,11 @@
 %%%-------------------------------------------------------------------
 -module(ecli).
 
--include("ecli.hrl").
+-include("ecli_internal.hrl").
+-include("../include/ecli.hrl").
 
 %% API
 -export([open/2, close/1]).
-
--export([
-         sequence/1, tree/2, value/1
-        ]).
 
 -export([
          expand/2, expand/3,
@@ -48,21 +45,6 @@ open(Path, CLIModule) ->
 -spec close(pid()) -> ok | {error, running | restarting | not_found}.
 close(Pid) ->
     ecli_sup:stop_child(Pid).
-
-%%--------------------------------------------------------------------
-%% @doc Create a more complex spec for children in the cli tree
-%%--------------------------------------------------------------------
-sequence(Seq) ->
-    #cli_sequence{seq = Seq}.
-
-tree(Fun, Opts) ->
-    #cli_tree{tree_fun = Fun,
-              pipe_cmds = proplists:get_value(pipe_cmds, Opts, []),
-              add_list_items = proplists:get_value(add_list_items, Opts, false)
-             }.
-
-value(Fun) ->
-    #cli_value{value_fun = Fun}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,6 +84,8 @@ format_menu(Items) ->
 format_normal_menu(Items) ->
     MaxCmdLen = max_cmd_len(Items),
     Menu = lists:map(fun(#{name := Cmd, desc := Desc}) ->
+                             ["  ", pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"];
+                        (#cmd{name = Cmd, desc = Desc}) ->
                              ["  ", pad(Cmd, MaxCmdLen + 1), Desc, "\r\n"]
                      end, Items),
     ["\r\n", Menu].
@@ -133,13 +117,15 @@ next_list_key([_Name|Ns], [_Key|Ks]) ->
 max_cmd_len([]) ->
     0;
 max_cmd_len(Items) ->
-    lists:max(lists:map(fun(#{name := Name}) -> length(Name) end, Items)).
+    lists:max(lists:map(fun(#{name := Name}) -> length(Name);
+                           (#cmd{name = Name}) -> length(Name)
+                        end, Items)).
 
 format_simple_tree(Tree) ->
     format_simple_tree(Tree, 0).
 
 format_simple_tree([{Name, {value, Val}}|Ts], Padding) ->
-    [spaces(Padding), Name," ", Val, ";\r\n",
+    [spaces(Padding), Name," ", format_value(Val), ";\r\n",
      format_simple_tree(Ts, Padding)];
 format_simple_tree([{Name, Children}|Ts], Padding) ->
     [spaces(Padding), fmt_name(Name), " {\r\n",
@@ -168,6 +154,7 @@ format(#{} = Map) ->
 format_value(Bin) when is_binary(Bin) -> Bin;
 format_value(Int) when is_integer(Int) -> integer_to_binary(Int);
 format_value(Atom) when is_atom(Atom) -> atom_to_list(Atom);
+format_value({A,B,C,D}) -> integer_to_list(A) ++ "." ++ integer_to_list(B) ++ "." ++ integer_to_list(C) ++ "." ++ integer_to_list(D);
 format_value(Else) -> io_lib:format("~p", [Else]).
 
 format_table([#{} = Map | _] = Maps) ->

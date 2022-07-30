@@ -10,7 +10,8 @@
 %%%-------------------------------------------------------------------
 -module(ecli_lookup).
 
--include("debug.hrl").
+-include("ecli_internal.hrl").
+-include("../include/ecli.hrl").
 
 -export([lookup/3]).
 
@@ -48,7 +49,13 @@ parse([{token, ""} | _Ts], _Tree, [], _Txn) ->
 parse([{token, Tok} | Ts], Tree, [], Txn) ->
     %% A token at the start. Expect it to match a container in the initial Tree
     case lookup(Tok, Tree) of
+        {ok, #cmd{} = CmdItem} ->
+            Item = ecli_util:cmd_to_map(CmdItem),
+            Children = ecli_util:children(Item, Txn, undefined),
+            %% io:format(user, "Starting with Item = ~p~n", [Item]),
+            parse(Ts, Children, [Item], Txn);
         {ok, #{node_type := container} = Item} ->
+            %% io:format(user, "Starting with Item = ~p~n", [Item]),
             Children = ecli_util:children(Item, Txn, undefined),
             %% io:format(user, "Starting with Item = ~p~n", [Item]),
             parse(Ts, Children, [Item], Txn);
@@ -59,9 +66,14 @@ parse([{token, Tok} | Ts], Tree, [], Txn) ->
             %% Oops, end of the line
             {error, "Command not understood"}
     end;
-parse([{token, Tok} | Ts], Tree, [#{node_type := container} | _] = Acc, Txn) ->
+parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn) when NodeType == container; NodeType == list ->
     %% A token after a container. Expect it to match an entry in the Tree
     case lookup(Tok, Tree) of
+        {ok, #cmd{} = CmdItem} ->
+            Item = ecli_util:cmd_to_map(CmdItem),
+            Children = ecli_util:children(Item, Txn, undefined),
+            %% io:format(user, "Starting with Item = ~p~n", [Item]),
+            parse(Ts, Children, [Item | Acc], Txn);
         {ok, #{node_type := container} = Item} ->
             Children = ecli_util:children(Item, Txn, undefined),
             %% io:format(user, "Adding Container Item in container = ~p~n", [Item]),
@@ -75,7 +87,7 @@ parse([{token, Tok} | Ts], Tree, [#{node_type := container} | _] = Acc, Txn) ->
         {ok, #{node_type := list} = Item} ->
             %% Expecting a key value next. Children could be all entries in the list..
             %% so ignore and deal with if we need completion
-            parse(Ts, [], [Item | Acc], Txn);
+            parse_list_keys(Ts, Item, Acc, Txn);
         false ->
             %% Oops, end of the line
             {error, "Command not understood"}
@@ -129,8 +141,6 @@ parse_value(#{type := uint8, range := Range}, Token) ->
     parse_integer(Token, FullRange);
 parse_value(#{type := uint8}, Token) -> parse_integer(Token, uint8_range());
 
-
-
 parse_value(#{type := int64, range := Range}, Token) ->
     FullRange = merge_ranges(int64_range(), Range),
     parse_integer(Token, FullRange);
@@ -163,6 +173,21 @@ parse_value(#{type := {Mod, Type}}, Token) when is_atom(Mod) ->
 parse_value(Type, Token) ->
     io:format("CLI unsupported leaf type: ~p\n", [Type]),
     Token.
+
+parse_list_keys([space], Item, Acc, Txn) ->
+    parse([], [], [Item | Acc], Txn);
+parse_list_keys([space | Ts], Item, Acc, Txn) ->
+    parse_list_keys(Ts, Item, Acc, Txn);
+parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyValues} = Item, Acc, Txn) ->
+    KeyValues1 = KeyValues ++ [Tok],
+    Item1 = Item#{key_values => KeyValues1},
+    if length(KeyNames) == length(KeyValues1) ->
+            %% Got the list keys, carry on in the main parser
+            Children = ecli_util:children(Item1, Txn, undefined),
+            parse(Ts, Children, [Item1 | Acc], Txn);
+        true ->
+            parse_list_keys(Ts, Item1, Acc, Txn)
+    end.
 
 merge_ranges([{min, Min} | Rs], UserRange) ->
     case lists:keyfind(min, 1, UserRange) of
@@ -210,7 +235,10 @@ parse_integer_in_range(_Int, _) ->
 
 lookup(Name, [#{name := Name} = Item | _Tree]) ->
     {ok, Item};
-lookup(Name, [#{} | Tree]) ->
+lookup(Name, [#cmd{name = Name} = Cmd | _Tree]) ->
+    Item = ecli_util:cmd_to_map(Cmd),
+    {ok, Item};
+lookup(Name, [_ | Tree]) ->
     lookup(Name, Tree);
 lookup(_, []) ->
     false.
