@@ -93,7 +93,7 @@ configuration_menu() ->
           action = fun(J, Item) -> show_interface_status(J, Item) end},
      #cmd{name = "set",
           desc = "Set a configuration parameter",
-          action = fun(Txn, Path) -> cfg_set(Txn, Path, Value) end},
+          action = fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end},
      #cmd{name = "exit",
           desc = "Exit configuration mode",
           action = fun(J, _) -> exit_config_mode(J) end}].
