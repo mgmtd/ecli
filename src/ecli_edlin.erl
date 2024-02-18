@@ -113,9 +113,9 @@ insert(eof, #edlin{line = {Bef, Aft}, requests = Rs} = Ed) ->
 
 %% prefix_arg(Argument)
 %%  Take a prefix argument and return its numeric value.
-prefix_arg(none) -> 1;
-prefix_arg({ctlu,N}) -> N;
-prefix_arg(N) -> N.
+%% prefix_arg(none) -> 1;
+%% prefix_arg({ctlu,N}) -> N;
+%% prefix_arg(N) -> N.
 
 %% key_map(Char, Prefix)
 %%  Map a character and a prefix to an action.
