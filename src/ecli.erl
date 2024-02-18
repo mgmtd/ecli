@@ -18,7 +18,7 @@
          expand/2, expand/3,
          lookup/3,
          format/1,
-         format_table/1,
+         format_table/2,
          format_menu/1,
          format_simple_tree/1
         ]).
@@ -157,9 +157,8 @@ format_value(Atom) when is_atom(Atom) -> atom_to_list(Atom);
 format_value({A,B,C,D}) -> integer_to_list(A) ++ "." ++ integer_to_list(B) ++ "." ++ integer_to_list(C) ++ "." ++ integer_to_list(D);
 format_value(Else) -> io_lib:format("~p", [Else]).
 
-format_table([#{} = Map | _] = Maps) ->
-    Titles = maps:keys(Map),
-    TitleLengths = lists:map(fun(T) -> {T, key_size(T)} end, Titles),
+format_table([#{} | _] = Maps, TitlesInOrder) ->
+    TitleLengths = lists:map(fun(T) -> {T, key_size(T)} end, TitlesInOrder),
     Lengths = maps:from_list(TitleLengths),
     ColLengths = lists:foldl(
                     fun(M, Ls) ->
@@ -167,10 +166,11 @@ format_table([#{} = Map | _] = Maps) ->
                             maps:put(K, max(maps:get(K, L), printable_size(V)), L)
                         end, Ls, M)
                     end, Lengths, Maps),
-    TitleRow = pad_row(maps:to_list(ColLengths)),
-    TitleUnderline = pad_row(lists:map(fun({T, L}) -> {list_to_binary(lists:duplicate(printable_size(T), $-)), L} end, maps:to_list(ColLengths))),
+    OrderedColLengths = lists:map(fun(T) -> {T, maps:get(T, ColLengths)} end, TitlesInOrder),
+    TitleRow = pad_row(OrderedColLengths),
+    TitleUnderline = pad_row(lists:map(fun({T, L}) -> {list_to_binary(lists:duplicate(printable_size(T), $-)), L} end, OrderedColLengths)),
     Rows = lists:map(fun(Row) ->
-                        RowWithLengths = lists:map(fun(T) -> {maps:get(T, Row), maps:get(T, ColLengths)} end, Titles),
+                        RowWithLengths = lists:map(fun(T) -> {maps:get(T, Row), maps:get(T, ColLengths)} end, TitlesInOrder),
                         [pad_row(RowWithLengths), "\r\n"]
                      end, Maps),
     [TitleRow, "\r\n", TitleUnderline, "\r\n", Rows].
