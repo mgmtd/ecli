@@ -258,6 +258,7 @@ expand_after_space([#cmd{name = OneName} = Item], _Acc, Txn, Cmd) ->
     {yes, OneName ++ " ", Menu};
 expand_after_space(Tree, _Acc, _Txn, _Cmd) ->
     %% Ending at a space, we got this far ok, show the next menu item if present
+    ?DBG("ecli_expand_after_space: fallthorgh = ~p~n",[Tree]),
     Menu = ecli:format_menu(Tree),
     {yes, "", Menu}.
 

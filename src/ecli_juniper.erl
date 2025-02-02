@@ -10,7 +10,7 @@
 
 -export([init/0, banner/1, prompt/1, expand/2, execute/2]).
 
--include_lib("ecli/include/ecli.hrl").
+-include("../include/ecli.hrl").
 
 -record(cli_juniper,
         {mode = operational,

@@ -35,7 +35,7 @@ children(#{node_type := list,
              Item,
          Txn,
          CmdType) ->
-    %% ?DBG("list children at path ~p with name ~p key_names ~p key_values ~p~n", [Path, Name, KeyNames, KeyValues]),
+    ?DBG("list children at path ~p with name ~p key_names ~p key_values ~p~n", [Path, Name, KeyNames, KeyValues]),
     %% Children for list items are the list keys plus maybe a wildcard
     %% if it's a set command and we want to allow adding a new list
     %% item (indicated by CmdType = set).
@@ -72,7 +72,7 @@ children(#{node_type := list,
            %% This is not yet all the keys. We need to only pick the current
            %% level, only unique values, and only items where the
            %% previous key parts match
-           %% ?DBG("ListKeys ~p ~p~n", [ListItemPath, ListKeys]),
+           ?DBG("ListKeys ~p ~p~n", [ListItemPath, ListKeys]),
            %%
            %% We don't have all this: the path isn't filled in, and
            %% we don't have the previous key values
