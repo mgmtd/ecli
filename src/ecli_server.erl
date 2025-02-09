@@ -289,7 +289,18 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
             get_chars_loop([], State#state{term = Term1,
                                            edlin = Edlin});
         stop ->
-            stop
+            case CliMod:mode_after_exit(State#state.ecli_state) of
+                stop ->
+                    stop;
+                CliState2 ->
+                    ok = send_raw("\r\n", State),
+                    {ok, Prompt} = CliMod:prompt(CliState2),
+                    {Edlin, InitialOps} = ecli_edlin:start(Prompt, State#state.history),
+                    Term1 = send_drv(InitialOps, State#state.socket, State#state.term),
+                    get_chars_loop([], State#state{term = Term1,
+                                                   edlin = Edlin,
+                                                   ecli_state = CliState2})
+            end
     end.
 
 
