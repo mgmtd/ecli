@@ -38,7 +38,7 @@ lookup(Str, Tree, Txn) ->
 
 parse([], _Tree, Acc, _Txn) ->
     {Cmd, Items} = lists:splitwith(fun(#{role := Role}) -> Role == cmd end, lists:reverse(Acc)),
-    %% io:format(user, "Looked up Cmd = ~p~nItems = ~p~n", [Cmd, Items]),
+    ?DBG("Looked up Cmd = ~p~nItems = ~p~n", [Cmd, Items]),
     {ok, Cmd, Items};
 parse([{part_string, _Str}], _Tree, _Acc, _Txn) ->
     %% Nothing we can do here, ending in an incomplete quotes delimited string
@@ -174,6 +174,8 @@ parse_value(Type, Token) ->
     io:format("CLI unsupported leaf type: ~p\n", [Type]),
     Token.
 
+parse_list_keys([], Item, Acc, Txn) ->
+    parse([], [], [Item | Acc], Txn);
 parse_list_keys([space], Item, Acc, Txn) ->
     parse([], [], [Item | Acc], Txn);
 parse_list_keys([space | Ts], Item, Acc, Txn) ->

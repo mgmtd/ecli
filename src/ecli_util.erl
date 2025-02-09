@@ -49,8 +49,10 @@ children(#{node_type := list,
     if KeysSoFar == KeysNeeded ->
            %% Now we have all the keys return the child nodes of the list.
            %% FIXME - remove the list keys from this list
-           FullPath = Path ++ [Name],
+           FullPath = Path ++ [Name] ++ [list_to_tuple(KeyValues)],
+           ?DBG("Full list path ~p~n", [FullPath]),
            Children = expand_children(Cs, FullPath),
+           ?DBG("Children ~p~n", [Children]),
            Filtered = filter_list_key_leafs(Children, KeyNames),
            insert_full_path(Filtered, Path ++ [Name]);
        true ->
@@ -98,6 +100,7 @@ children(#{node_type := list,
                set ->
                    [Template#{node_type => new_list_item} | KeysItems];
                _ ->
+                    ?DBG("ListKeys Items ~p~n", [KeysItems]),
                    KeysItems
            end
     end;

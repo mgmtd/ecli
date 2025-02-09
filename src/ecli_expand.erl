@@ -25,6 +25,7 @@ expand(Str, Tree) ->
 expand(Str, Tree, Txn) ->
     case ecli_tokenise:string(Str) of
         {ok, Tokens} ->
+            ?DBG("Tokens ~p~n", [Tokens]),
             parse(Tokens, Tree, Txn);
         no ->
             no
@@ -48,9 +49,10 @@ parse([space], MenuItems, Acc, Txn, Cmd) ->
     ?DBG("Expanding after space = ~p~n", [Acc]),
     ?DBG("Expanding after space menuitems = ~p~n", [MenuItems]),
     expand_after_space(MenuItems, Acc, Txn, Cmd);
-parse([{part_string, _Str}], _Tree, _Acc, _Txn, _Cmd) ->
+parse([{part_string, Str}], _Tree, Acc, _Txn, _Cmd) ->
     %% Nothing we can do here, the user need to carry on typing their string
     %% (Or, maybe this is part of a list key we could complete... future)
+    ?DBG("Expanding part string = ~p when Acc = ~n", [Str, Acc]),
     no;
 parse([{token, Tok} | Ts], Tree, [], Txn, Cmd) ->
     %% A token at the start. Expect it to match a container in the initial Tree.
@@ -175,9 +177,33 @@ parse_list_keys([space], Item, _Acc, Txn, Cmd) ->
     {yes, "", Menu};
 parse_list_keys([space | Ts], Item, Acc, Txn, Cmd) ->
     parse_list_keys(Ts, Item, Acc, Txn, Cmd);
-parse_list_keys([{token, _Tok}], _Item, _Acc, _Txn, _Cmd) ->
-    %% Ended at end of a token, just provide a space
-    {yes, " ", []};
+parse_list_keys([{token, Tok}], Item, _Acc, Txn, Cmd) ->
+    %% Ended at end of a token, Could be a whole list key,
+    %% part of the only one that matches, or not a match at all.
+    ?DBG("Reached end of list key ~p~n", [Tok]),
+    Children = menu_item_children(Item, Txn, Cmd),
+    ?DBG("Reached end of list key got children ~p~n", [Children]),
+    Matches = filter_by_prefix(Tok, Children),
+    case Matches of
+        [] ->
+            no;
+        [#cmd{name = Name} = Item] when Name == Tok ->
+            Children = menu_item_children(Item, Txn, Cmd),
+            Menu = ecli:format_menu(Children),
+            {yes, " ", Menu};
+        [#{name := Name} = Item] when Name == Tok ->
+            Children = menu_item_children(Item, Txn, Cmd),
+            Menu = ecli:format_menu(Children),
+            {yes, " ", Menu};
+        [#cmd{name = Name}] ->
+            {yes, chars_to_expand(Tok, Name), []};
+        [#{name := Name}] ->
+            {yes, chars_to_expand(Tok, Name), []};
+        _ ->
+            Chars = expand_menus(Tok, Matches),
+            Menu = ecli:format_menu(Matches),
+            {yes, Chars, Menu}
+    end;
 parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyValues} = Item, Acc, Txn, Cmd) ->
     KeyValues1 = KeyValues ++ [Tok],
     Item1 = Item#{key_values => KeyValues1},
