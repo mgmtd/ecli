@@ -26,7 +26,6 @@ children(#{node_type := container, children := Cs} = Item, _Txn, _CmdType) ->
     insert_full_path(Children, Path);
 children(#{node_type := list,
            path := Path,
-           name := Name,
            children := Cs,
            data_callback := DataCallbackMod,
            key_names := KeyNames,
@@ -129,12 +128,6 @@ list_keys_match(SoFar, Needed, Keys) ->
     %% Create list like ["Key1", "Key2", '$1', '_','_']
     Pattern = Keys ++ ['$1'] ++ lists:duplicate(Needed - SoFar - 1, '_'),
     list_to_tuple(Pattern).
-
-%% Append Item to path once we are past the command part of the string
-items_path(Path, #{role := cmd}) ->
-    Path;
-items_path(Path, #{name := Name}) ->
-    Path ++ [Name].
 
 insert_full_path(Children, Path) ->
     lists:map(fun(#{role := cmd} = S) -> S#{path => Path};

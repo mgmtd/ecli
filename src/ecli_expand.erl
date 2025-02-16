@@ -49,10 +49,10 @@ parse([space], MenuItems, Acc, Txn, Cmd) ->
     ?DBG("Expanding after space = ~p~n", [Acc]),
     ?DBG("Expanding after space menuitems = ~p~n", [MenuItems]),
     expand_after_space(MenuItems, Acc, Txn, Cmd);
-parse([{part_string, Str}], _Tree, Acc, _Txn, _Cmd) ->
+parse([{part_string, _Str}], _Tree, _Acc, _Txn, _Cmd) ->
     %% Nothing we can do here, the user need to carry on typing their string
     %% (Or, maybe this is part of a list key we could complete... future)
-    ?DBG("Expanding part string = ~p when Acc = ~n", [Str, Acc]),
+    ?DBG("Expanding part string = ~p when Acc = ~n", [_Str, _Acc]),
     no;
 parse([{token, Tok} | Ts], Tree, [], Txn, Cmd) ->
     %% A token at the start. Expect it to match a container in the initial Tree.
