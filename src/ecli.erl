@@ -8,7 +8,6 @@
 %%%-------------------------------------------------------------------
 -module(ecli).
 
--include("ecli_internal.hrl").
 -include("../include/ecli.hrl").
 
 %% API
@@ -161,17 +160,17 @@ format_table([#{} | _] = Maps, TitlesInOrder) ->
     TitleLengths = lists:map(fun(T) -> {T, key_size(T)} end, TitlesInOrder),
     Lengths = maps:from_list(TitleLengths),
     ColLengths = lists:foldl(
-                    fun(M, Ls) ->
-                        maps:fold(fun(K, V, L) ->
-                            maps:put(K, max(maps:get(K, L), printable_size(V)), L)
-                        end, Ls, M)
-                    end, Lengths, Maps),
+                   fun(M, Ls) ->
+                           maps:fold(fun(K, V, L) ->
+                                             maps:put(K, max(maps:get(K, L), printable_size(V)), L)
+                                     end, Ls, M)
+                   end, Lengths, Maps),
     OrderedColLengths = lists:map(fun(T) -> {T, maps:get(T, ColLengths)} end, TitlesInOrder),
     TitleRow = pad_row(OrderedColLengths),
     TitleUnderline = pad_row(lists:map(fun({T, L}) -> {list_to_binary(lists:duplicate(printable_size(T), $-)), L} end, OrderedColLengths)),
     Rows = lists:map(fun(Row) ->
-                        RowWithLengths = lists:map(fun(T) -> {maps:get(T, Row), maps:get(T, ColLengths)} end, TitlesInOrder),
-                        [pad_row(RowWithLengths), "\r\n"]
+                             RowWithLengths = lists:map(fun(T) -> {maps:get(T, Row), maps:get(T, ColLengths)} end, TitlesInOrder),
+                             [pad_row(RowWithLengths), "\r\n"]
                      end, Maps),
     [TitleRow, "\r\n", TitleUnderline, "\r\n", Rows].
 

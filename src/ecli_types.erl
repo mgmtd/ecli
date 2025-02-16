@@ -29,19 +29,19 @@
 %% xpath1.0
 
 -type yang_type() :: counter32
-                    | 'zero-based-counter32'
-                    | counter64
-                    | 'zero-based-counter64'
-                    | gauge32
-                    | gauge64
-                    | 'object-identifier'
-                    | 'object-identifier-128'
-                    | 'date-and-time'
-                    | timeticks
-                    | timestamp
-                    | 'phys-address'
-                    | 'mac-address'
-                    | 'xpath1.0'.
+                   | 'zero-based-counter32'
+                   | counter64
+                   | 'zero-based-counter64'
+                   | gauge32
+                   | gauge64
+                   | 'object-identifier'
+                   | 'object-identifier-128'
+                   | 'date-and-time'
+                   | timeticks
+                   | timestamp
+                   | 'phys-address'
+                   | 'mac-address'
+                   | 'xpath1.0'.
 
 -spec parse(yang_type(), string()) -> {ok, any()} | {error, string()}.
 parse(counter32, Value) ->

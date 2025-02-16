@@ -187,7 +187,7 @@ parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyV
             %% Got the list keys, carry on in the main parser
             Children = ecli_util:children(Item1, Txn, undefined),
             parse(Ts, Children, [Item1 | Acc], Txn);
-        true ->
+       true ->
             parse_list_keys(Ts, Item1, Acc, Txn)
     end.
 

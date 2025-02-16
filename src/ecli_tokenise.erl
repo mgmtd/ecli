@@ -2,7 +2,7 @@
 %%% @author Sean Hinde <sean@Seans-MacBook.local>
 %%% @copyright (C) 2022, Sean Hinde
 %%% @doc CLI Command string tokeniser useful for completion and execution
-%%% 
+%%%
 %%% Created : 30 Apr 2022 by Sean Hinde <sean@Seans-MacBook.local>
 %%%-------------------------------------------------------------------
 -module(ecli_tokenise).

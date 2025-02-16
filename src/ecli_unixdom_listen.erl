@@ -20,10 +20,10 @@
 
 -record(state,
         {
-          listen_socket,
-          path,
-          ecli_mod,
-          acceptor_pid
+         listen_socket,
+         path,
+         ecli_mod,
+         acceptor_pid
         }).
 
 %%%===================================================================

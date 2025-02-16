@@ -12,11 +12,11 @@
 
 -record(edlin,
         {
-          line = {[], []},       % {Chars_before_cursor, Chars_after}
-          state = none,
-          prompt,
-          requests = [],
-          history = {[],[]}      % {Before, After}
+         line = {[], []},       % {Chars_before_cursor, Chars_after}
+         state = none,
+         prompt,
+         requests = [],
+         history = {[],[]}      % {Before, After}
         }).
 
 %%--------------------------------------------------------------------
@@ -101,7 +101,7 @@ insert([C|Cs], #edlin{state = State, line = {Bef, Aft},
             case do_op(Op, Bef, Aft, Rs0) of
                 {Line, Rs, Mode} -> % allow custom modes from do_op
                     insert(Cs, Ed#edlin{line = Line, state = Mode,
-                                           requests = Rs});
+                                        requests = Rs});
                 {Line, Rs} ->
                     insert(Cs, Ed#edlin{line = Line, state = none, requests = Rs})
             end

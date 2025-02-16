@@ -76,7 +76,7 @@ parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn, Cmd)
         {ok, #{node_type := container} = Item} ->
             NewCmd = maps:get(cmd_type, Item, Cmd),
             Children = menu_item_children(Item, Txn, NewCmd),
-            ?DBG("Adding Container Item in container = ~p~n", [Item]),
+            ?DBG("Adding Container Item in container = ~p children ~p~n", [Item, Children]),
             parse(Ts, Children, [Item | Acc], Txn, NewCmd);
         {ok, #{node_type := Leaf, type := Type} = Item} when Leaf == leaf; Leaf == leaf_list ->
             %% Expecting a leaf value, possibly followed by more entries in the same
@@ -211,7 +211,7 @@ parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyV
             %% Got the list keys, carry on in the main parser
             Children = menu_item_children(Item1, Txn, Cmd),
             parse(Ts, Children, [Item1 | Acc], Txn, Cmd);
-        true ->
+       true ->
             parse_list_keys(Ts, Item1, Acc, Txn, Cmd)
     end.
 
@@ -251,7 +251,7 @@ expand_after_space([], [#{node_type := leaf, value := _Val} | _Acc], _Txn, _Cmd)
     %% This leaf has a value, but no peer items. End of the command
     no;
 expand_after_space(Tree, [#{node_type := leaf, value := _Val} | _Acc], _Txn, _Cmd) ->
-     %% This leaf has a value. Show the remaining Menu items
+    %% This leaf has a value. Show the remaining Menu items
     Menu = ecli:format_menu(Tree),
     {yes, "", Menu};
 expand_after_space(_Menu, [#{node_type := leaf, desc := Desc, type := Type} | _Acc], _Txn, _Cmd) ->
@@ -332,7 +332,7 @@ remove(Tok, Tree) ->
 %% each key in sequence. Once we have all list keys children become
 %% the items inside the list item, minus the list key names.
 menu_item_children(Item, Txn, CmdType) ->
-     ecli_util:children(Item, Txn, CmdType).
+    ecli_util:children(Item, Txn, CmdType).
 
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"
@@ -342,7 +342,7 @@ expand_menus(Str, Menus) ->
     Suffixes = lists:map(fun(#{name := Name}) ->
                                  lists:nthtail(StrLen, Name);
                             (#cmd{name = Name}) ->
-                                lists:nthtail(StrLen, Name)
+                                 lists:nthtail(StrLen, Name)
                          end, Menus),
     %% ?DBG("expand_menus ML = ~p~n",[Suffixes]),
     longest_common_prefix(Suffixes).

@@ -20,17 +20,17 @@
 
 -record(state,
         {
-          socket,
-          listen_pid,
-          listen_socket,
-          term,                                 % #ecli_term{}
-          edlin,                                % #ecli_edlin{}
-          ecli_mod,         % User defined CLI callback implementation
-          ecli_state,          % State threaded through cli callbacks
-          history = [],     % command line history for this session
-          got_meta = false,
-          buf = <<>>                     % Temp buf for UTF boundaries
-         }).
+         socket,
+         listen_pid,
+         listen_socket,
+         term,                                 % #ecli_term{}
+         edlin,                                % #ecli_edlin{}
+         ecli_mod,         % User defined CLI callback implementation
+         ecli_state,          % State threaded through cli callbacks
+         history = [],     % command line history for this session
+         got_meta = false,
+         buf = <<>>                     % Temp buf for UTF boundaries
+        }).
 
 %%%===================================================================
 %%% API
@@ -220,7 +220,7 @@ process_sigwinch(Bin, Term) ->
                     {SigWinch, Trailing} = erlang:split_binary(SigWinchPre, 12),
                     {Rows, Cols} = parse_sigwinch(SigWinch),
                     process_sigwinch(<<PreData/binary, Trailing/binary>>, ecli_term:sigwinch(Rows, Cols, Term));
-                true ->
+               true ->
                     %% Partial Sigwinch update
                     {PreData, PartSigWinch} = erlang:split_binary(Bin, Start),
                     {PreData, Term, PartSigWinch}
@@ -267,15 +267,15 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
                     Term = send_drv(Ops, State#state.socket, State#state.term),
                     {ok, Prompt} = CliMod:prompt(CliState),
                     History = case FullLine of
-                                "" -> State#state.history;
-                                _-> [FullLine | State#state.history]
+                                  "" -> State#state.history;
+                                  _-> [FullLine | State#state.history]
                               end,
                     {Edlin, InitialOps} = ecli_edlin:start(Prompt, History),
                     Term1 = send_drv(InitialOps, State#state.socket, Term),
                     get_chars_loop(Cs, State#state{term = Term1,
-                                                edlin = Edlin,
-                                                history = History,
-                                                ecli_state = CliState});
+                                                   edlin = Edlin,
+                                                   history = History,
+                                                   ecli_state = CliState});
                 stop ->
                     gen_tcp:close(State#state.socket),
                     stop
@@ -293,7 +293,7 @@ get_chars_loop(CharList, #state{ecli_mod = CliMod} = State) ->
                 stop ->
                     stop;
                 CliState2 ->
-                    ok = send_raw("\r\n", State),
+                    ok = send_raw("\r\n\r\n[ok]\r\n", State),
                     {ok, Prompt} = CliMod:prompt(CliState2),
                     {Edlin, InitialOps} = ecli_edlin:start(Prompt, State#state.history),
                     Term1 = send_drv(InitialOps, State#state.socket, State#state.term),
