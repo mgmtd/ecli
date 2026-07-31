@@ -166,16 +166,17 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
         {ok, Cmd, Path} ->
             io:format("Got item ~p~n", [{Cmd, Path}]),
             #{action := Action} = lists:last(Cmd),
-            case catch Action(J, Path) of
-                {'EXIT', Reason} ->
-                    io:format("Executing configuration exit ~p~n", [Reason]),
-                    {ok, "Error executing command", J};
+            try Action(J, Path) of
                 {ok, Result} ->
                     {ok, Result, J};
                 {ok, Result, #cli_juniper{} = J1} ->
                     {ok, Result, J1};
                 {ok, Result, UserTxn} ->
                     {ok, Result, J#cli_juniper{user_txn = UserTxn}}
+            catch
+                _:Reason ->
+                    io:format("Executing configuration exit ~p~n", [Reason]),
+                    {ok, "Error executing command", J}
             end
     end.
 

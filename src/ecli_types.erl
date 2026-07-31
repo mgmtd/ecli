@@ -45,13 +45,14 @@
 
 -spec parse(yang_type(), string()) -> {ok, any()} | {error, string()}.
 parse(counter32, Value) ->
-    case catch list_to_integer(Value) of
-        {'EXIT', _} ->
-            {error, "Invalid counter32"};
+    try list_to_integer(Value) of
         Int when Int >= 0, Int =< 4294967295 ->
-            Int;
+            {ok, Int};
         _ ->
             {error, "Counter32 out of range"}
+    catch 
+        error:badarg ->
+            {error, "Invalid counter32"}
     end.
 
 
