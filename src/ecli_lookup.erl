@@ -219,11 +219,12 @@ int16_range() -> [{min, -32768}, {max, 32767}].
 int8_range() -> [{min, -128}, {max, 127}].
 
 parse_integer(Token, Range) ->
-    case catch list_to_integer(Token) of
-        {'EXIT', _} ->
-            {error, "Expected an integer value"};
+    try list_to_integer(Token) of
         Int ->
             parse_integer_in_range(Int, Range)
+    catch
+        error:badarg ->
+            {error, "Expected an integer value"}
     end.
 
 parse_integer_in_range(Int, [{min, Min} | Rs]) when Int >= Min ->
