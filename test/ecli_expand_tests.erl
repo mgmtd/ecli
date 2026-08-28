@@ -73,3 +73,16 @@ expand_leaf_value2_space_test() ->
     Str = "admin peers add host 10.2.3.4 po",
     ?assertEqual({yes,"rt ",[]}, ecli_expand:expand(Str, Tree)).
 
+expand_enum_space_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {yes, "", Menu} = ecli_expand:expand("set host speed ", Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  1GbE  1 Gigabit/s Ethernet\r\n  10GbE 10 Gigabit/s Ethernet\r\n">>,
+                 MenuBin).
+
+expand_enum_prefix_test() ->
+    %% "1" is a prefix of both 1GbE and 10GbE; unique completion needs "1G".
+    Tree = ecli_test_schema:test_tree(),
+    ?assertEqual({yes, "bE ", []},
+                 ecli_expand:expand("set host speed 1G", Tree)).
+

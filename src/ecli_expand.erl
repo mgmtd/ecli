@@ -81,7 +81,7 @@ parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn, Cmd)
         {ok, #{node_type := Leaf, type := Type} = Item} when Leaf == leaf; Leaf == leaf_list ->
             %% Expecting a leaf value, possibly followed by more entries in the same
             %% container. If it's an enum type keep going, otherwise keep the same possible future tree, but without this node
-            EnumTree = enum_values(Type),
+            EnumTree = ecli_types:completions(Type),
             Tree1 = remove(Tok, Tree),
             ?DBG("Adding Leaf Item in container = ~p~n", [Item]),
             parse_leaf(Ts, EnumTree, Tree1, Item, Acc, Txn, Cmd);
@@ -103,8 +103,8 @@ parse([{token, _Tok} | Ts], Tree, [#{node_type := leaf, type := Type} = Leaf, #{
     %% Token after a leaf after a container. It's the value, we can discard it for completion purposes
     %% Go back to to fetch something else from the remaining children of this container
     ?DBG("Setting leaf value in container = ~p ~p ~n", [Leaf, Container]),
-    case enum_values(Type) of
-        false ->
+    case ecli_types:completions(Type) of
+        [] ->
             parse(Ts, Tree, [Container | Acc], Txn, Cmd);
         EnumValues ->
             parse(Ts, EnumValues, [Leaf, Container | Acc], Txn, Cmd)
@@ -257,7 +257,7 @@ expand_after_space(Tree, [#{node_type := leaf, value := _Val} | _Acc], _Txn, _Cm
 expand_after_space(_Menu, [#{node_type := leaf, desc := Desc, type := Type} | _Acc], _Txn, _Cmd) ->
     %% Leaf with no value. User needs to start putting in some effort here!
     %% Help them out by showing the help text or enumerated values
-    case enum_values(Type) of
+    case ecli_types:completions(Type) of
         [] ->
             {yes, "", ["\r\n", Desc, "\r\n"]};
         Tree ->
@@ -287,12 +287,6 @@ expand_after_space(Tree, _Acc, _Txn, _Cmd) ->
     ?DBG("ecli_expand_after_space: fallthorgh = ~p~n",[Tree]),
     Menu = ecli:format_menu(Tree),
     {yes, "", Menu}.
-
-enum_values(boolean) ->
-    [#{name => "true", desc => "True"},
-     #{name => "false", desc => "False"}];
-enum_values(_) ->
-    [].
 
 filter_by_prefix(_Str, []) ->
     [];

@@ -121,58 +121,15 @@ parse([space | Ts], Tree, Acc, Txn) ->
     %% io:format(user, "Skipping space~n", []),
     parse(Ts, Tree, Acc, Txn).
 
-parse_value(#{type := uint64, range := Range}, Token) ->
-    FullRange = merge_ranges(uint64_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := uint64}, Token) -> parse_integer(Token, uint64_range());
-
-parse_value(#{type := uint32, range := Range}, Token) ->
-    FullRange = merge_ranges(uint32_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := uint32}, Token) -> parse_integer(Token, uint32_range());
-
-parse_value(#{type := uint16, range := Range}, Token) ->
-    FullRange = merge_ranges(uint16_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := uint16}, Token) -> parse_integer(Token, uint16_range());
-
-parse_value(#{type := uint8, range := Range}, Token) ->
-    FullRange = merge_ranges(uint8_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := uint8}, Token) -> parse_integer(Token, uint8_range());
-
-parse_value(#{type := int64, range := Range}, Token) ->
-    FullRange = merge_ranges(int64_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := int64}, Token) -> parse_integer(Token, int64_range());
-
-parse_value(#{type := int32, range := Range}, Token) ->
-    FullRange = merge_ranges(int32_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := int32}, Token) -> parse_integer(Token, int32_range());
-
-parse_value(#{type := int16, range := Range}, Token) ->
-    FullRange = merge_ranges(int16_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := int16}, Token) -> parse_integer(Token, int16_range());
-
-parse_value(#{type := int8, range := Range}, Token) ->
-    FullRange = merge_ranges(int8_range(), Range),
-    parse_integer(Token, FullRange);
-parse_value(#{type := int8}, Token) -> parse_integer(Token, int8_range());
-
-parse_value(#{type := string}, Token) -> Token;
-parse_value(#{type := boolean}, "true") -> true;
-parse_value(#{type := boolean}, "false") -> false;
-parse_value(#{type := {Mod, Type}}, Token) when is_atom(Mod) ->
-    case Mod:parse_value(Type, Token) of
-        {ok, Value} -> Value;
-        {error, _Err} = Err ->
-            Err
-    end;
-parse_value(Type, Token) ->
-    io:format("CLI unsupported leaf type: ~p\n", [Type]),
+parse_value(#{type := Type, range := Range}, Token) when is_atom(Type) ->
+    unwrap_parse(ecli_types:parse({Type, Range}, Token));
+parse_value(#{type := Type}, Token) ->
+    unwrap_parse(ecli_types:parse(Type, Token));
+parse_value(_Leaf, Token) ->
     Token.
+
+unwrap_parse({ok, Value}) -> Value;
+unwrap_parse({error, _Reason} = Err) -> Err.
 
 parse_list_keys([], Item, Acc, Txn) ->
     parse([], [], [Item | Acc], Txn);
@@ -190,51 +147,6 @@ parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyV
        true ->
             parse_list_keys(Ts, Item1, Acc, Txn)
     end.
-
-merge_ranges([{min, Min} | Rs], UserRange) ->
-    case lists:keyfind(min, 1, UserRange) of
-        {min, UMin} when UMin > Min ->
-            [{min, UMin} | merge_ranges(Rs, UserRange)];
-        _ ->
-            [{min, Min} | merge_ranges(Rs, UserRange)]
-    end;
-merge_ranges([{max, Max} | Rs], UserRange) ->
-    case lists:keyfind(max, 1, UserRange) of
-        {max, UMax} when UMax < Max ->
-            [{max, UMax} | merge_ranges(Rs, UserRange)];
-        _ ->
-            [{max, Max} | merge_ranges(Rs, UserRange)]
-    end;
-merge_ranges([], _) ->
-    [].
-
-uint64_range() -> [{min, 0}, {max, 18446744073709551615}].
-uint32_range() -> [{min, 0}, {max, 4294967295}].
-uint16_range() -> [{min, 0}, {max, 65535}].
-uint8_range() -> [{min, 0}, {max, 255}].
-
-int64_range() -> [{min, -9223372036854775808}, {max, 9223372036854775807}].
-int32_range() -> [{min, -2147483648}, {max, 2147483647}].
-int16_range() -> [{min, -32768}, {max, 32767}].
-int8_range() -> [{min, -128}, {max, 127}].
-
-parse_integer(Token, Range) ->
-    try list_to_integer(Token) of
-        Int ->
-            parse_integer_in_range(Int, Range)
-    catch
-        error:badarg ->
-            {error, "Expected an integer value"}
-    end.
-
-parse_integer_in_range(Int, [{min, Min} | Rs]) when Int >= Min ->
-    parse_integer_in_range(Int, Rs);
-parse_integer_in_range(Int, [{max, Max} | Rs]) when Int =< Max ->
-    parse_integer_in_range(Int, Rs);
-parse_integer_in_range(Int, []) ->
-    Int;
-parse_integer_in_range(_Int, _) ->
-    {error, "Value out of range"}.
 
 lookup(Name, [#{name := Name} = Item | _Tree]) ->
     {ok, Item};

@@ -113,10 +113,13 @@ Many things:
 - [ ] Provide a way for cli to connect to different unix domain paths
 - [ ] Completion of value types - strings, leaf lists, enums
 - [ ] Use the values extracted from terminfo properly
-- [ ] CTRL-c handling in the cli program
-- [ ] CTRL-d to close session (or exit configure mode) if at start of line
+- [x] CTRL-c handling in the cli program
+- [x] CTRL-d to close session (or exit configure mode) if at start of line
 - [ ] Lots more of the control keys in ecli_edlin.erl need to be hooked up
 - [ ] cursor back from a second line goes to the wrong place
 - [ ] proper logging of user commands
 - [ ] skipping over control sequences in output e.g. coloring
 - [ ] Pipe command modifiers
+- [ ] Add yang schema support
+- [ ] Add namespace support
+- [ ] Add sys.config style database where namespace maps to application name

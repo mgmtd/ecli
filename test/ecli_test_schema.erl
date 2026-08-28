@@ -135,6 +135,13 @@ config_host_menu() ->
        name => "name",
        desc => "Name of host",
        type => string
+     },
+     #{role => schema,
+       node_type => leaf,
+       name => "speed",
+       desc => "Interface speed",
+       type => {enum, [{"1GbE", "1 Gigabit/s Ethernet"},
+                       {"10GbE", "10 Gigabit/s Ethernet"}]}
      }].
 
 %% Testing list item with multiple keys
