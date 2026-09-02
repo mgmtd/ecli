@@ -94,20 +94,22 @@ parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn, Cmd)
             %% Oops, end of the line
             no
     end;
-parse([{token, _Tok} | _] = Ts, Tree, [#{node_type := leaf, value := _Value}, #{node_type := container} = Container | Acc], Txn, Cmd) ->
-    %% Token after a leaf after a container when we also have the value
-    %% Backtrack to to fetch something else from the remaining children of this container
-    ?DBG("Skipping leaf value = ~p~n", [Container]),
-    parse(Ts, Tree, [Container | Acc], Txn, Cmd);
-parse([{token, _Tok} | Ts], Tree, [#{node_type := leaf, type := Type} = Leaf, #{node_type := container} = Container | Acc], Txn, Cmd) ->
-    %% Token after a leaf after a container. It's the value, we can discard it for completion purposes
-    %% Go back to to fetch something else from the remaining children of this container
-    ?DBG("Setting leaf value in container = ~p ~p ~n", [Leaf, Container]),
+parse([{token, _Tok} | _] = Ts, Tree, [#{node_type := leaf, value := _Value}, #{node_type := NT} = Parent | Acc], Txn, Cmd)
+  when NT == container; NT == list ->
+    %% Token after a valued leaf: remaining siblings of the parent
+    %% container or list item (e.g. `level error config …`).
+    ?DBG("Skipping leaf value = ~p~n", [Parent]),
+    parse(Ts, Tree, [Parent | Acc], Txn, Cmd);
+parse([{token, _Tok} | Ts], Tree, [#{node_type := leaf, type := Type} = Leaf, #{node_type := NT} = Parent | Acc], Txn, Cmd)
+  when NT == container; NT == list ->
+    %% Token after a leaf. It's the value; discard it for completion and
+    %% return to the parent container or list item.
+    ?DBG("Setting leaf value in container = ~p ~p ~n", [Leaf, Parent]),
     case ecli_types:completions(Type) of
         [] ->
-            parse(Ts, Tree, [Container | Acc], Txn, Cmd);
+            parse(Ts, Tree, [Parent | Acc], Txn, Cmd);
         EnumValues ->
-            parse(Ts, EnumValues, [Leaf, Container | Acc], Txn, Cmd)
+            parse(Ts, EnumValues, [Leaf, Parent | Acc], Txn, Cmd)
     end;
 parse([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | Acc], Txn, Cmd) ->
     %% Token after a leaf. This is the value. Just put it it in the leaf

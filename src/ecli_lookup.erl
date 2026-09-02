@@ -93,17 +93,18 @@ parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn) when
             {error, "Command not understood"}
     end;
 parse([{token, Tok} | Ts], Tree, [#{node_type := leaf, value := _Value} | _] = Acc, Txn) ->
-    %% Token after a leaf that already has a value can only be another leaf in some multi leaf container setup.
-    %% io:format(user, "Setting leaf value in container = ~p ~p ~n", [Leaf, Container]),
+    %% Token after a valued leaf: another sibling leaf, or a nested
+    %% container / list (e.g. `set ... level error config file PATH`).
     case lookup(Tok, Tree) of
         {ok, #{node_type := Leaf} = Item} when Leaf == leaf; Leaf == leaf_list ->
-            %% Expecting a leaf value, possibly followed by more entries in the same
-            %% container. Keep the same possible future tree, but without this node
             Tree1 = remove(Tok, Tree),
-            %% io:format(user, "Adding Leaf Item in container = ~p~n", [Item]),
             parse(Ts, Tree1, [Item | Acc], Txn);
+        {ok, #{node_type := container} = Item} ->
+            Children = ecli_util:children(Item, Txn, undefined),
+            parse(Ts, Children, [Item | Acc], Txn);
+        {ok, #{node_type := list} = Item} ->
+            parse_list_keys(Ts, Item, Acc, Txn);
         false ->
-            %% Oops, end of the line
             {error, "Unkown parameter"}
     end;
 parse([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | Acc], Txn) ->
@@ -119,7 +120,9 @@ parse([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | Acc], Txn) ->
 parse([space | Ts], Tree, Acc, Txn) ->
     %% Spaces not relevant outside completion
     %% io:format(user, "Skipping space~n", []),
-    parse(Ts, Tree, Acc, Txn).
+    parse(Ts, Tree, Acc, Txn);
+parse([{token, _} | _], _Tree, _Acc, _Txn) ->
+    {error, "Command not understood"}.
 
 parse_value(#{type := Type, range := Range}, Token) when is_atom(Type) ->
     unwrap_parse(ecli_types:parse({Type, Range}, Token));
