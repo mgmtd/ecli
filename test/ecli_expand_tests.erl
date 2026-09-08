@@ -86,3 +86,40 @@ expand_enum_prefix_test() ->
     ?assertEqual({yes, "bE ", []},
                  ecli_expand:expand("set host speed 1G", Tree)).
 
+expand_pipe_menu_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {yes, " ", Menu} = ecli_expand:expand("show status |", Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(true, binary:match(MenuBin, <<"display">>) =/= nomatch),
+    ?assertEqual(true, binary:match(MenuBin, <<"match">>) =/= nomatch).
+
+expand_pipe_trailing_space_does_not_add_space_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {yes, "", Menu} = ecli_expand:expand("show status | ", Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(true, binary:match(MenuBin, <<"display">>) =/= nomatch),
+    ?assertEqual(true, binary:match(MenuBin, <<"match">>) =/= nomatch).
+
+expand_pipe_display_prefix_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    ?assertEqual({yes, "splay ", []},
+                 ecli_expand:expand("show status | di", Tree)).
+
+expand_pipe_display_children_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {yes, "", Menu} = ecli_expand:expand("show status | display ", Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(true, binary:match(MenuBin, <<"xml">>) =/= nomatch),
+    ?assertEqual(true, binary:match(MenuBin, <<"json">>) =/= nomatch).
+
+expand_pipe_after_space_offers_pipe_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {yes, "", Menu} = ecli_expand:expand("show status ", Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(true, binary:match(MenuBin, <<"|">>) =/= nomatch).
+
+expand_set_does_not_offer_pipe_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    Result = ecli_expand:expand("set host name x |", Tree),
+    ?assertEqual(no, Result).
+

@@ -10,7 +10,10 @@
     {
        name :: string(),
        desc = "" :: string(),
-       action :: fun((term(), [atom()], term()) -> ok | {error, string()}),
-       children = fun() -> [] end :: fun(() -> list()),
-       list_action = show :: show | set
+       action :: undefined | fun() | {pipe, term()},
+       children = fun() -> [] end :: fun(() -> list()) | list(),
+       list_action = show :: show | set,
+       %% Pipe catalog for `|` after this command and its descendants.
+       %% `undefined` inherits from the parent; `[]` disables pipes.
+       pipes = undefined :: undefined | list() | fun(() -> list()) | fun((term()) -> list())
     }).

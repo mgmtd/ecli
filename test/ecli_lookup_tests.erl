@@ -11,7 +11,7 @@ list_keys(_Txn, _Path, _Match) ->
 %% `set logger def level error config file /u01/log` — leaf then nested
 %% container under a list item. Used to crash ecli_lookup:parse/4.
 lookup_leaf_then_nested_container_test() ->
-    {ok, Cmd, Items} =
+    {ok, Cmd, Items, []} =
         ecli_lookup:lookup("set logger def level error config file /u01/log",
                            tree(), undefined),
     ?assertMatch([#{name := "set"}], Cmd),
@@ -25,7 +25,7 @@ lookup_leaf_then_nested_container_test() ->
     ?assertEqual(["def"], maps:get(key_values, Logger)).
 
 lookup_sibling_leaves_still_work_test() ->
-    {ok, _Cmd, Items} =
+    {ok, _Cmd, Items, []} =
         ecli_lookup:lookup("set logger def level error module logger_std_h",
                            tree(), undefined),
     Names = [maps:get(name, I) || I <- Items],
@@ -34,7 +34,7 @@ lookup_sibling_leaves_still_work_test() ->
     ?assertEqual("logger_std_h", maps:get(value, lists:nth(3, Items))).
 
 lookup_nested_container_only_test() ->
-    {ok, _Cmd, Items} =
+    {ok, _Cmd, Items, []} =
         ecli_lookup:lookup("set logger def config file /u01/log",
                            tree(), undefined),
     Names = [maps:get(name, I) || I <- Items],
@@ -88,3 +88,36 @@ logger_config() ->
        name => "file",
        desc => "Log file",
        type => string}].
+
+lookup_show_display_xml_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {ok, Cmd, Items, [Stage]} =
+        ecli_lookup:lookup("show status | display xml", Tree, undefined),
+    ?assertEqual(["show", "status"], [maps:get(name, C) || C <- Cmd]),
+    ?assertEqual([], Items),
+    ?assertEqual(["display", "xml"], [maps:get(name, N) || N <- Stage]).
+
+lookup_show_match_chain_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    {ok, _Cmd, _Items, Stages} =
+        ecli_lookup:lookup("show status | display xml | match foo", Tree, undefined),
+    ?assertEqual(2, length(Stages)),
+    [Display, Match] = Stages,
+    ?assertEqual(["display", "xml"], [maps:get(name, N) || N <- Display]),
+    ?assertEqual("match", maps:get(name, hd(Match))),
+    ?assertEqual("foo", maps:get(value, lists:last(Match))).
+
+lookup_pipe_not_allowed_on_set_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    ?assertEqual({error, "Pipe commands not allowed"},
+                 ecli_lookup:lookup("set host name x | display xml", Tree, undefined)).
+
+lookup_incomplete_display_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    ?assertEqual({error, "Incomplete command"},
+                 ecli_lookup:lookup("show status | display", Tree, undefined)).
+
+lookup_trailing_pipe_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    ?assertEqual({error, "Incomplete command"},
+                 ecli_lookup:lookup("show status |", Tree, undefined)).

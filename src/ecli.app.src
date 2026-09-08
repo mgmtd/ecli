@@ -5,7 +5,8 @@
   {mod, { ecli_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    xmerl
    ]},
   {env,[]},
   {modules, []},

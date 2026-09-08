@@ -16,6 +16,7 @@
 -export([
          expand/2, expand/3,
          lookup/3,
+         run/4,
          format/1,
          format_table/2,
          format_menu/1,
@@ -59,15 +60,65 @@ expand(Str, Tree, UserTxn) ->
     ecli_expand:expand(Str, Tree, UserTxn).
 
 %%--------------------------------------------------------------------
-%% @doc Given a full command string and a tree of items return false
-%%      if the command doesn't point to a leaf in the tree,
-%%      or {ok, Action} where action is a fun that will execute the
-%%      command.
+%% @doc Given a full command string and a tree of items return
+%%      `{ok, Cmd, Path, PipeStages}' or `{error, Reason}'.
+%%      `PipeStages' is `[]' when the command has no `|` modifiers.
 %% @end
 %%--------------------------------------------------------------------
--spec lookup(Path::string(), Tree::term(), term()) -> {ok, fun()} | false.
+-spec lookup(Path::string(), Tree::term(), term()) ->
+          {ok, list(), list(), list()} | {error, string()}.
 lookup(Str, Tree, Txn) ->
     ecli_lookup:lookup(Str, Tree, Txn).
+
+%%--------------------------------------------------------------------
+%% @doc Look up a command, run its action, and apply any pipe stages.
+%%      Action is `fun(State, Path)' and may return `{ok, Result}' or
+%%      `{ok, Result, NewState}'. Result is an iolist or `{data, Tree}'.
+%% @end
+%%--------------------------------------------------------------------
+-spec run(string(), list(), term(), term()) -> {ok, iodata(), term()}.
+run(Str, Tree, Txn, State) ->
+    case lookup(Str, Tree, Txn) of
+        {error, Reason} ->
+            {ok, Reason, State};
+        {ok, [], _Path, _Pipes} ->
+            {ok, "Incomplete command", State};
+        {ok, Cmd, Path, Pipes} ->
+            case lists:last(Cmd) of
+                #{action := Action} when is_function(Action) ->
+                    run_action(Action, State, Path, Pipes);
+                _ ->
+                    {ok, "Incomplete command", State}
+            end
+    end.
+
+run_action(Action, State, Path, Pipes) ->
+    Result =
+        try
+            case erlang:fun_info(Action, arity) of
+                {arity, 2} -> Action(State, Path);
+                {arity, 1} -> Action(State)
+            end
+        catch
+            _:_ ->
+                {ok, "Error executing command", State}
+        end,
+    case Result of
+        {ok, Out} ->
+            {ok, unwrap_pipe(Out, Pipes), State};
+        {ok, Out, NewState} ->
+            {ok, unwrap_pipe(Out, Pipes), NewState};
+        _ ->
+            {ok, "Error executing command", State}
+    end.
+
+unwrap_pipe(Out, Pipes) ->
+    case ecli_pipe:apply(Out, Pipes) of
+        {error, Reason} ->
+            Reason;
+        Text ->
+            Text
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Given a list of menu items format it for display inserting
@@ -124,7 +175,10 @@ format_simple_tree(Tree) ->
     format_simple_tree(Tree, 0).
 
 format_simple_tree([{Name, {value, Val}}|Ts], Padding) ->
-    [spaces(Padding), Name," ", format_value(Val), ";\r\n",
+    [spaces(Padding), fmt_name(Name)," ", format_value(Val), ";\r\n",
+     format_simple_tree(Ts, Padding)];
+format_simple_tree([{Name, {leaf_list, Vals}}|Ts], Padding) ->
+    [spaces(Padding), fmt_name(Name), " ", format_leaf_list(Vals), ";\r\n",
      format_simple_tree(Ts, Padding)];
 format_simple_tree([{Name, Children}|Ts], Padding) ->
     [spaces(Padding), fmt_name(Name), " {\r\n",
@@ -137,6 +191,16 @@ format_simple_tree([], _) ->
 fmt_name(T) when is_tuple(T) ->
     lists:join(" ", tuple_to_list(T));
 fmt_name(N) -> N.
+
+format_leaf_list([]) ->
+    "[]";
+format_leaf_list(Vals) ->
+    ["[ ", lists:join(" ", [format_leaf_list_item(V) || V <- Vals]), " ]"].
+
+format_leaf_list_item(V) when is_list(V); is_binary(V) ->
+    V;
+format_leaf_list_item(V) ->
+    format_value(V).
 
 %%--------------------------------------------------------------------
 %% @doc Format output from a command in pretty format.

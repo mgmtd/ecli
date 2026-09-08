@@ -13,12 +13,25 @@ string(Str) ->
     Stripped = ecli_util:strip_ws(Str),
     tokenise(Stripped, [], []).
 
+%% Empty input stays `{token, ""}` so lookup can treat it as a no-op.
+tokenise([], [], []) ->
+    {ok, [{token, ""}]};
+tokenise([], [], Acc) ->
+    {ok, lists:reverse(Acc)};
 tokenise([], Current, Acc) ->
     {ok, lists:reverse([{token, lists:reverse(Current)} | Acc])};
+tokenise([$\s], [], Acc) ->
+    {ok, lists:reverse([space | Acc])};
 tokenise([$\s], Current, Acc) ->
     {ok, lists:reverse([space, {token, lists:reverse(Current)} | Acc])};
+tokenise([$\s | Cs], [], Acc) ->
+    tokenise(Cs, "", [space | Acc]);
 tokenise([$\s | Cs], Current, Acc) ->
     tokenise(Cs, "", [space, {token, lists:reverse(Current)} | Acc]);
+tokenise([$| | Cs], [], Acc) ->
+    tokenise(Cs, "", [pipe | Acc]);
+tokenise([$| | Cs], Current, Acc) ->
+    tokenise([$| | Cs], "", [{token, lists:reverse(Current)} | Acc]);
 tokenise([$\" | Cs], "", Acc) ->
     tokenise_string(Cs, "", Acc);
 tokenise([$\" | _Cs], _, _Acc) ->

@@ -151,10 +151,12 @@ strip_ws(Str) ->
 cmd_to_map(#cmd{name = Name,
                 desc = Desc,
                 action = Action,
-                children = Children}) ->
+                children = Children,
+                pipes = Pipes}) ->
     #{role => cmd,
       node_type => container,
       name => Name,
       desc => Desc,
       action => Action,
-      children => Children}.
+      children => Children,
+      pipes => Pipes}.

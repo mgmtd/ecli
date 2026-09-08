@@ -7,7 +7,9 @@ test_tree() ->
        node_type => container,
        name => "show",
        desc => "Show commands",
-       children => fun() -> operational_show_menu() end
+       children => fun() -> operational_show_menu() end,
+       action => fun(_, _) -> {ok, {data, show_data()}} end,
+       pipes => fun ecli_pipe:show_pipes/0
       },
      #{role => cmd,
        node_type => container,
@@ -41,14 +43,21 @@ operational_show_menu() ->
     [#{role => cmd,
        node_type => container,
        name => "status",
-       desc => "Status summary"
+       desc => "Status summary",
+       action => fun(_, _) -> {ok, {data, show_data()}} end
       },
      #{role => cmd,
        node_type => container,
        name => "peers",
-       desc => "Show peers"
+       desc => "Show peers",
+       action => fun(_, _) -> {ok, {data, show_data()}} end
       }
     ].
+
+show_data() ->
+    [{"status", {value, "ok"}},
+     {"host", [{"name", {value, "box1"}},
+               {"speed", {value, "1GbE"}}]}].
 
 operational_admin_menu() ->
     [#{role => cmd,

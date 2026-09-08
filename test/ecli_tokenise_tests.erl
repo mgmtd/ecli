@@ -11,8 +11,63 @@ tokenise_string_test() ->
                     {token,"joe"},
                     space,
                     {string,"Str"},
-                    {token,[]},
                     space]},
+    ?assertEqual(Expect, ecli_tokenise:string(Str)).
+
+tokenise_pipe_spaced_test() ->
+    Str = "show configuration | display xml",
+    Expect = {ok, [{token,"show"},
+                   space,
+                   {token,"configuration"},
+                   space,
+                   pipe,
+                   space,
+                   {token,"display"},
+                   space,
+                   {token,"xml"}]},
+    ?assertEqual(Expect, ecli_tokenise:string(Str)).
+
+tokenise_pipe_no_spaces_test() ->
+    Str = "show configuration|display xml",
+    Expect = {ok, [{token,"show"},
+                   space,
+                   {token,"configuration"},
+                   pipe,
+                   {token,"display"},
+                   space,
+                   {token,"xml"}]},
+    ?assertEqual(Expect, ecli_tokenise:string(Str)).
+
+tokenise_pipe_trailing_test() ->
+    ?assertEqual({ok, [{token,"show"}, space, pipe]},
+                 ecli_tokenise:string("show |")).
+
+tokenise_pipe_inside_quotes_test() ->
+    Str = "show | match \"a|b\"",
+    Expect = {ok, [{token,"show"},
+                   space,
+                   pipe,
+                   space,
+                   {token,"match"},
+                   space,
+                   {string,"a|b"}]},
+    ?assertEqual(Expect, ecli_tokenise:string(Str)).
+
+tokenise_chained_pipes_test() ->
+    Str = "show | display xml | match foo",
+    Expect = {ok, [{token,"show"},
+                   space,
+                   pipe,
+                   space,
+                   {token,"display"},
+                   space,
+                   {token,"xml"},
+                   space,
+                   pipe,
+                   space,
+                   {token,"match"},
+                   space,
+                   {token,"foo"}]},
     ?assertEqual(Expect, ecli_tokenise:string(Str)).
 
 tokenise_mid_token_test() ->

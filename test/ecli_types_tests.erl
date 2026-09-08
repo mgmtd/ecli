@@ -44,7 +44,7 @@ completions_boolean_test() ->
 
 lookup_enum_value_test() ->
     Tree = ecli_test_schema:test_tree(),
-    {ok, _Cmd, Items} = ecli:lookup("set host speed 1GbE", Tree, undefined),
+    {ok, _Cmd, Items, []} = ecli:lookup("set host speed 1GbE", Tree, undefined),
     #{name := "speed", value := "1GbE"} = lists:last(Items).
 
 lookup_enum_unknown_test() ->

@@ -71,7 +71,8 @@ operational_menu() ->
     [#cmd{name = "show",
           desc = "Show commands",
           action = fun(J, Item) -> show_operational(J, Item) end,
-          children = fun() -> operational_show_menu() end},
+          children = fun() -> operational_show_menu() end,
+          pipes = fun ecli_pipe:show_pipes/0},
      #cmd{name = "configure",
           desc = "Enter configuration mode",
           action = fun(J, _) -> enter_config_mode(J) end},
@@ -94,7 +95,8 @@ configuration_menu() ->
     [#cmd{name = "show",
           desc = "Show configuration",
           children = fun() -> configuration_tree() end,
-          action = fun(J, Item) -> show_interface_status(J, Item) end},
+          action = fun(J, Item) -> show_interface_status(J, Item) end,
+          pipes = fun ecli_pipe:config_show_pipes/0},
      #cmd{name = "set",
           desc = "Set a configuration parameter",
           action = fun(Txn, Path, Value) -> cfg_set(Txn, Path, Value) end},
@@ -113,14 +115,14 @@ exit_config_mode(#cli_juniper{user_txn = _Txn} = J) ->
     {ok, "", J#cli_juniper{mode = operational, user_txn = undefined}}.
 
 show_status(#cli_juniper{} = J, _Item) ->
-    {ok, "Status description\r\n", J}.
+    {ok, {data, [{"status", {value, "Status description"}}]}, J}.
 
 show_interface_status(#cli_juniper{} = J, _Item) ->
-    {ok, "Interface statuses\r\n", J}.
+    {ok, {data, [{"interface", {value, "up"}}]}, J}.
 
 show_operational(#cli_juniper{user_txn = _Txn}, Item) ->
     io:format("Executing show operational ~p~n", [Item]),
-    {ok, "Operational statuses\r\n"}.
+    {ok, {data, [{"operational", {value, "statuses"}}]}}.
 
 configuration_tree() ->
     [].
@@ -163,21 +165,29 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
     case ecli:lookup(CmdStr, Menu, Txn) of
         {error, Reason} ->
             {ok, Reason, J};
-        {ok, Cmd, Path} ->
+        {ok, Cmd, Path, Pipes} ->
             io:format("Got item ~p~n", [{Cmd, Path}]),
             #{action := Action} = lists:last(Cmd),
             try Action(J, Path) of
                 {ok, Result} ->
-                    {ok, Result, J};
+                    {ok, pipe_out(Result, Pipes), J};
                 {ok, Result, #cli_juniper{} = J1} ->
-                    {ok, Result, J1};
+                    {ok, pipe_out(Result, Pipes), J1};
                 {ok, Result, UserTxn} ->
-                    {ok, Result, J#cli_juniper{user_txn = UserTxn}}
+                    {ok, pipe_out(Result, Pipes), J#cli_juniper{user_txn = UserTxn}}
             catch
                 _:Reason ->
                     io:format("Executing configuration exit ~p~n", [Reason]),
                     {ok, "Error executing command", J}
             end
+    end.
+
+pipe_out(Result, Pipes) ->
+    case ecli_pipe:apply(Result, Pipes) of
+        {error, Reason} ->
+            Reason;
+        Out ->
+            Out
     end.
 
 -ifdef(TEST).
@@ -207,6 +217,6 @@ partial_match_multiple_test_() ->
 add_space_top_level_test_() ->
     {ok, J} = init(),
     Result = expand("show", J),
-    ?_assertMatch({yes, " ", ["\r\n", [_, _, _]], #cli_juniper{mode = operational}}, Result).
+    ?_assertMatch({yes, " ", ["\r\n", [_, _, _ | _]], #cli_juniper{mode = operational}}, Result).
 
 -endif.

@@ -31,97 +31,83 @@ lookup(Str, Tree, Txn) ->
     case ecli_tokenise:string(Str) of
         {ok, Tokens} ->
             ?DBG("tokens ~p~n",[Tokens]),
-            parse(Tokens, Tree, [], Txn);
+            parse(normalise(Tokens), Tree, [], Txn, undefined);
         no ->
             {error, "Command not understood"}
     end.
 
-parse([], _Tree, Acc, _Txn) ->
-    {Cmd, Items} = lists:splitwith(fun(#{role := Role}) -> Role == cmd end, lists:reverse(Acc)),
+parse([], _Tree, Acc, _Txn, _Pipes) ->
+    {Cmd, Items} = split_cmd(Acc),
     ?DBG("Looked up Cmd = ~p~nItems = ~p~n", [Cmd, Items]),
-    {ok, Cmd, Items};
-parse([{part_string, _Str}], _Tree, _Acc, _Txn) ->
-    %% Nothing we can do here, ending in an incomplete quotes delimited string
+    {ok, Cmd, Items, []};
+parse([pipe | Ts], _Tree, Acc, Txn, Pipes) ->
+    case has_pipes(Pipes) andalso Acc =/= [] of
+        false ->
+            {error, "Pipe commands not allowed"};
+        true ->
+            {Cmd, Items} = split_cmd(Acc),
+            parse_pipe_stage(Ts, Pipes, [], [], Cmd, Items, Pipes, Txn)
+    end;
+parse([{part_string, _Str}], _Tree, _Acc, _Txn, _Pipes) ->
     {error, "Command not understood"};
-parse([{token, ""} | _Ts], _Tree, [], _Txn) ->
-    %% Completely empty command, this is fine
+parse([{token, ""} | _Ts], _Tree, [], _Txn, _Pipes) ->
     {error, ""};
-parse([{token, Tok} | Ts], Tree, [], Txn) ->
-    %% A token at the start. Expect it to match a container in the initial Tree
+parse([{token, Tok} | Ts], Tree, [], Txn, Pipes) ->
     case lookup(Tok, Tree) of
         {ok, #cmd{} = CmdItem} ->
             Item = ecli_util:cmd_to_map(CmdItem),
             Children = ecli_util:children(Item, Txn, undefined),
-            %% io:format(user, "Starting with Item = ~p~n", [Item]),
-            parse(Ts, Children, [Item], Txn);
+            parse(Ts, Children, [Item], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := container} = Item} ->
-            %% io:format(user, "Starting with Item = ~p~n", [Item]),
             Children = ecli_util:children(Item, Txn, undefined),
-            %% io:format(user, "Starting with Item = ~p~n", [Item]),
-            parse(Ts, Children, [Item], Txn);
+            parse(Ts, Children, [Item], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := leaf} = Item} ->
-            %% io:format(user, "Starting with Item = ~p~n", [Item]),
-            parse(Ts, [], [Item], Txn);
+            parse(Ts, [], [Item], Txn, update_pipes(Item, Pipes));
         false ->
-            %% Oops, end of the line
             {error, "Command not understood"}
     end;
-parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn) when NodeType == container; NodeType == list ->
-    %% A token after a container. Expect it to match an entry in the Tree
+parse([{token, Tok} | Ts], Tree, [#{node_type := NodeType} | _] = Acc, Txn, Pipes)
+  when NodeType == container; NodeType == list ->
     case lookup(Tok, Tree) of
         {ok, #cmd{} = CmdItem} ->
             Item = ecli_util:cmd_to_map(CmdItem),
             Children = ecli_util:children(Item, Txn, undefined),
-            %% io:format(user, "Starting with Item = ~p~n", [Item]),
-            parse(Ts, Children, [Item | Acc], Txn);
+            parse(Ts, Children, [Item | Acc], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := container} = Item} ->
             Children = ecli_util:children(Item, Txn, undefined),
-            %% io:format(user, "Adding Container Item in container = ~p~n", [Item]),
-            parse(Ts, Children, [Item | Acc], Txn);
+            parse(Ts, Children, [Item | Acc], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := Leaf} = Item} when Leaf == leaf; Leaf == leaf_list ->
-            %% Expecting a leaf value, possibly followed by more entries in the same
-            %% container. Keep the same possible future tree, but without this node
             Tree1 = remove(Tok, Tree),
-            %% io:format(user, "Adding Leaf Item in container = ~p~n", [Item]),
-            parse(Ts, Tree1, [Item | Acc], Txn);
+            parse(Ts, Tree1, [Item | Acc], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := list} = Item} ->
-            %% Expecting a key value next. Children could be all entries in the list..
-            %% so ignore and deal with if we need completion
-            parse_list_keys(Ts, Item, Acc, Txn);
+            parse_list_keys(Ts, Item, Acc, Txn, update_pipes(Item, Pipes));
         false ->
-            %% Oops, end of the line
             {error, "Command not understood"}
     end;
-parse([{token, Tok} | Ts], Tree, [#{node_type := leaf, value := _Value} | _] = Acc, Txn) ->
-    %% Token after a valued leaf: another sibling leaf, or a nested
-    %% container / list (e.g. `set ... level error config file PATH`).
+parse([{token, Tok} | Ts], Tree, [#{node_type := leaf, value := _Value} | _] = Acc, Txn, Pipes) ->
     case lookup(Tok, Tree) of
         {ok, #{node_type := Leaf} = Item} when Leaf == leaf; Leaf == leaf_list ->
             Tree1 = remove(Tok, Tree),
-            parse(Ts, Tree1, [Item | Acc], Txn);
+            parse(Ts, Tree1, [Item | Acc], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := container} = Item} ->
             Children = ecli_util:children(Item, Txn, undefined),
-            parse(Ts, Children, [Item | Acc], Txn);
+            parse(Ts, Children, [Item | Acc], Txn, update_pipes(Item, Pipes));
         {ok, #{node_type := list} = Item} ->
-            parse_list_keys(Ts, Item, Acc, Txn);
+            parse_list_keys(Ts, Item, Acc, Txn, update_pipes(Item, Pipes));
         false ->
             {error, "Unkown parameter"}
     end;
-parse([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | Acc], Txn) ->
-    %% Token after a leaf. This is the value. Just put it it in the leaf
-    %% io:format(user, "Setting leaf value = ~p~n", [Leaf]),
+parse([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | Acc], Txn, Pipes) ->
     case parse_value(Leaf, Tok) of
         {error, _Reason} = Err ->
             Err;
         Value ->
             Leaf1 = Leaf#{value => Value},
-            parse(Ts, Tree, [Leaf1 | Acc], Txn)
+            parse(Ts, Tree, [Leaf1 | Acc], Txn, Pipes)
     end;
-parse([space | Ts], Tree, Acc, Txn) ->
-    %% Spaces not relevant outside completion
-    %% io:format(user, "Skipping space~n", []),
-    parse(Ts, Tree, Acc, Txn);
-parse([{token, _} | _], _Tree, _Acc, _Txn) ->
+parse([space | Ts], Tree, Acc, Txn, Pipes) ->
+    parse(Ts, Tree, Acc, Txn, Pipes);
+parse([{token, _} | _], _Tree, _Acc, _Txn, _Pipes) ->
     {error, "Command not understood"}.
 
 parse_value(#{type := Type, range := Range}, Token) when is_atom(Type) ->
@@ -134,22 +120,130 @@ parse_value(_Leaf, Token) ->
 unwrap_parse({ok, Value}) -> Value;
 unwrap_parse({error, _Reason} = Err) -> Err.
 
-parse_list_keys([], Item, Acc, Txn) ->
-    parse([], [], [Item | Acc], Txn);
-parse_list_keys([space], Item, Acc, Txn) ->
-    parse([], [], [Item | Acc], Txn);
-parse_list_keys([space | Ts], Item, Acc, Txn) ->
-    parse_list_keys(Ts, Item, Acc, Txn);
-parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyValues} = Item, Acc, Txn) ->
+parse_list_keys([pipe | _] = Ts, Item, Acc, Txn, Pipes) ->
+    parse(Ts, [], [Item | Acc], Txn, Pipes);
+parse_list_keys([], Item, Acc, Txn, Pipes) ->
+    parse([], [], [Item | Acc], Txn, Pipes);
+parse_list_keys([space], Item, Acc, Txn, Pipes) ->
+    parse([], [], [Item | Acc], Txn, Pipes);
+parse_list_keys([space | Ts], Item, Acc, Txn, Pipes) ->
+    parse_list_keys(Ts, Item, Acc, Txn, Pipes);
+parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyValues} = Item, Acc, Txn, Pipes) ->
     KeyValues1 = KeyValues ++ [Tok],
     Item1 = Item#{key_values => KeyValues1},
     if length(KeyNames) == length(KeyValues1) ->
-            %% Got the list keys, carry on in the main parser
             Children = ecli_util:children(Item1, Txn, undefined),
-            parse(Ts, Children, [Item1 | Acc], Txn);
+            parse(Ts, Children, [Item1 | Acc], Txn, Pipes);
        true ->
-            parse_list_keys(Ts, Item1, Acc, Txn)
+            parse_list_keys(Ts, Item1, Acc, Txn, Pipes)
     end.
+
+%%--------------------------------------------------------------------
+%% Pipe stages
+%%--------------------------------------------------------------------
+
+parse_pipe_stage([pipe | _Ts], _Tree, [], _Stages, _Cmd, _Items, _Catalog, _Txn) ->
+    {error, "Incomplete command"};
+parse_pipe_stage([pipe | Ts], _Tree, StageAcc, Stages, Cmd, Items, Catalog, Txn) ->
+    case stage_complete(StageAcc) of
+        false ->
+            {error, "Incomplete command"};
+        true ->
+            parse_pipe_stage(Ts, Catalog, [], [lists:reverse(StageAcc) | Stages],
+                             Cmd, Items, Catalog, Txn)
+    end;
+parse_pipe_stage([], _Tree, StageAcc, Stages, Cmd, Items, _Catalog, _Txn) ->
+    finish_pipes(StageAcc, Stages, Cmd, Items);
+parse_pipe_stage([space | Ts], Tree, StageAcc, Stages, Cmd, Items, Catalog, Txn) ->
+    parse_pipe_stage(Ts, Tree, StageAcc, Stages, Cmd, Items, Catalog, Txn);
+parse_pipe_stage([{token, Tok} | Ts], Tree, [], Stages, Cmd, Items, Catalog, Txn) ->
+    case lookup(Tok, Tree) of
+        {ok, Item0} ->
+            Item = item_map(Item0),
+            Children = ecli_util:children(Item, Txn, undefined),
+            parse_pipe_stage(Ts, Children, [Item], Stages, Cmd, Items, Catalog, Txn);
+        false ->
+            {error, "Command not understood"}
+    end;
+parse_pipe_stage([{token, Tok} | Ts], Tree, [#{node_type := container} | _] = StageAcc,
+                 Stages, Cmd, Items, Catalog, Txn) ->
+    case lookup(Tok, Tree) of
+        {ok, Item0} ->
+            Item = item_map(Item0),
+            Children = ecli_util:children(Item, Txn, undefined),
+            parse_pipe_stage(Ts, Children, [Item | StageAcc], Stages, Cmd, Items, Catalog, Txn);
+        false ->
+            {error, "Command not understood"}
+    end;
+parse_pipe_stage([{token, Tok} | Ts], Tree, [#{node_type := leaf} = Leaf | StageAcc],
+                 Stages, Cmd, Items, Catalog, Txn) ->
+    case maps:is_key(value, Leaf) of
+        true ->
+            {error, "Command not understood"};
+        false ->
+            case parse_value(Leaf, Tok) of
+                {error, _Reason} = Err ->
+                    Err;
+                Value ->
+                    Leaf1 = Leaf#{value => Value},
+                    parse_pipe_stage(Ts, Tree, [Leaf1 | StageAcc], Stages, Cmd, Items, Catalog, Txn)
+            end
+    end;
+parse_pipe_stage([{token, _} | _], _Tree, _StageAcc, _Stages, _Cmd, _Items, _Catalog, _Txn) ->
+    {error, "Command not understood"};
+parse_pipe_stage([{part_string, _}], _Tree, _StageAcc, _Stages, _Cmd, _Items, _Catalog, _Txn) ->
+    {error, "Command not understood"}.
+
+finish_pipes([], [], _Cmd, _Items) ->
+    {error, "Incomplete command"};
+finish_pipes([], _Stages, _Cmd, _Items) ->
+    %% Trailing `|` with no following pipe command
+    {error, "Incomplete command"};
+finish_pipes(StageAcc, Stages, Cmd, Items) ->
+    case stage_complete(StageAcc) of
+        false ->
+            {error, "Incomplete command"};
+        true ->
+            {ok, Cmd, Items, lists:reverse([lists:reverse(StageAcc) | Stages])}
+    end.
+
+stage_complete([#{action := {pipe, _}, value := _} | _]) ->
+    true;
+stage_complete([#{action := {pipe, match}} | _]) ->
+    false;
+stage_complete([#{action := {pipe, except}} | _]) ->
+    false;
+stage_complete([#{action := {pipe, _}} | _]) ->
+    true;
+stage_complete([#{value := _} | _]) ->
+    true;
+stage_complete(_) ->
+    false.
+
+split_cmd(Acc) ->
+    lists:splitwith(fun(#{role := Role}) -> Role == cmd end, lists:reverse(Acc)).
+
+item_map(#cmd{} = C) ->
+    ecli_util:cmd_to_map(C);
+item_map(M) ->
+    M.
+
+normalise([{string, S} | Ts]) ->
+    [{token, S} | normalise(Ts)];
+normalise([T | Ts]) ->
+    [T | normalise(Ts)];
+normalise([]) ->
+    [].
+
+has_pipes(P) when is_list(P), P =/= [] ->
+    true;
+has_pipes(_) ->
+    false.
+
+update_pipes(#{pipes := P}, _Prev) when P =/= undefined ->
+    ecli_pipe:catalog(P);
+update_pipes(_, Prev) ->
+    Prev.
 
 lookup(Name, [#{name := Name} = Item | _Tree]) ->
     {ok, Item};
