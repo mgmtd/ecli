@@ -14,7 +14,7 @@
 -include("../include/ecli.hrl").
 
 -export([show_pipes/0, config_show_pipes/0]).
--export([catalog/1, apply/2]).
+-export([catalog/1, apply/2, wants_defaults/1]).
 
 %%--------------------------------------------------------------------
 %% Catalogs
@@ -64,7 +64,10 @@ display_xml_json() ->
           action = {pipe, {display, xml}}},
      #cmd{name = "json",
           desc = "Display as JSON",
-          action = {pipe, {display, json}}}].
+          action = {pipe, {display, json}}},
+     #cmd{name = "defaults",
+          desc = "Include schema default values",
+          action = {pipe, {display, defaults}}}].
 
 match_cmd() ->
     #{role => cmd,
@@ -104,10 +107,20 @@ apply(Result, Stages) ->
             filter_text(Text, Filters)
     end.
 
+%% @doc True if any pipe stage is `display defaults`.
+-spec wants_defaults(list()) -> boolean().
+wants_defaults(Stages) ->
+    lists:any(fun(Stage) -> stage_op(Stage) =:= {display, defaults} end,
+              Stages).
+
 classify([], Format, Filters) ->
     {Format, lists:reverse(Filters)};
 classify([Stage | Rest], Format, Filters) ->
     case stage_op(Stage) of
+        {display, defaults} ->
+            %% Fill defaults in the action; render as curly unless a
+            %% later display xml/json/set overrides.
+            classify(Rest, curly, Filters);
         {display, F} ->
             classify(Rest, F, Filters);
         {match, Pat} ->
@@ -145,6 +158,8 @@ render({data, Tree}, json) ->
 render({data, Tree}, set) ->
     format_set_tree(Tree);
 render({data, Tree}, curly) ->
+    ecli:format_simple_tree(Tree);
+render({data, Tree}, defaults) ->
     ecli:format_simple_tree(Tree);
 render(_Text, Format) when Format =/= curly ->
     {error, "Command does not support this display format"};

@@ -72,6 +72,14 @@ apply_set_leaf_list_test() ->
     Set = iolist_to_binary(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(<<"set tags red\r\nset tags green\r\n">>, Set).
 
+apply_display_defaults_test() ->
+    Stage = [#{name => "display"},
+             #{name => "defaults", action => {pipe, {display, defaults}}}],
+    Text = iolist_to_binary(ecli_pipe:apply({data, sample_tree()}, [Stage])),
+    ?assertEqual(list_to_binary(ecli:format_simple_tree(sample_tree())), Text),
+    ?assertEqual(true, ecli_pipe:wants_defaults([Stage])),
+    ?assertEqual(false, ecli_pipe:wants_defaults([])).
+
 apply_display_set_test() ->
     Stage = [#{name => "display"},
              #{name => "set", action => {pipe, {display, set}}}],

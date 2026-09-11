@@ -110,7 +110,8 @@ expand_pipe_display_children_test() ->
     {yes, "", Menu} = ecli_expand:expand("show status | display ", Tree),
     MenuBin = list_to_binary(Menu),
     ?assertEqual(true, binary:match(MenuBin, <<"xml">>) =/= nomatch),
-    ?assertEqual(true, binary:match(MenuBin, <<"json">>) =/= nomatch).
+    ?assertEqual(true, binary:match(MenuBin, <<"json">>) =/= nomatch),
+    ?assertEqual(true, binary:match(MenuBin, <<"defaults">>) =/= nomatch).
 
 expand_pipe_after_space_offers_pipe_test() ->
     Tree = ecli_test_schema:test_tree(),

@@ -96,6 +96,7 @@ run_action(Action, State, Path, Pipes) ->
     Result =
         try
             case erlang:fun_info(Action, arity) of
+                {arity, 3} -> Action(State, Path, Pipes);
                 {arity, 2} -> Action(State, Path);
                 {arity, 1} -> Action(State)
             end

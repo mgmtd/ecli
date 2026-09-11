@@ -168,7 +168,7 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
         {ok, Cmd, Path, Pipes} ->
             io:format("Got item ~p~n", [{Cmd, Path}]),
             #{action := Action} = lists:last(Cmd),
-            try Action(J, Path) of
+            try run_action(Action, J, Path, Pipes) of
                 {ok, Result} ->
                     {ok, pipe_out(Result, Pipes), J};
                 {ok, Result, #cli_juniper{} = J1} ->
@@ -180,6 +180,13 @@ execute_menu_item(CmdStr, Menu, #cli_juniper{user_txn = Txn} = J) ->
                     io:format("Executing configuration exit ~p~n", [Reason]),
                     {ok, "Error executing command", J}
             end
+    end.
+
+run_action(Action, J, Path, Pipes) ->
+    case erlang:fun_info(Action, arity) of
+        {arity, 3} -> Action(J, Path, Pipes);
+        {arity, 2} -> Action(J, Path);
+        {arity, 1} -> Action(J)
     end.
 
 pipe_out(Result, Pipes) ->
