@@ -45,12 +45,16 @@ expand_char4_test() ->
 expand_leaf_space_test() ->
     Tree = ecli_test_schema:test_tree(),
     Str = "admin peers add host ",
-    ?assertEqual({yes,[],["\r\n","Hostname","\r\n"]}, ecli_expand:expand(Str, Tree)).
+    {yes, "", Menu} = ecli_expand:expand(Str, Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  host Hostname\r\n">>, MenuBin).
 
 expand_leaf_test() ->
     Tree = ecli_test_schema:test_tree(),
     Str = "admin peers add host",
-    ?assertEqual({yes," ",[]}, ecli_expand:expand(Str, Tree)).
+    {yes, " ", Menu} = ecli_expand:expand(Str, Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  host Hostname\r\n">>, MenuBin).
 
 expand_leaf_value_test() ->
     %% Expect an inserted space and to be prompted with the remaining leafs as a menu
@@ -69,16 +73,41 @@ expand_leaf_value_space_test() ->
     ?assertEqual(<<"\r\n  port    Port\r\n  pubkey  Remote node public key starting with pp_\r\n  trusted If the peer is trusted\r\n">>, MenuBin).
 
 expand_leaf_value2_space_test() ->
-    %% Expect to be prompted with the remaining leafs as a menu
+    %% Unique prefix of a sibling leaf inserts the rest of the name and
+    %% shows the leaf (name + description) as the value prompt.
     Tree = ecli_test_schema:test_tree(),
     Str = "admin peers add host 10.2.3.4 po",
-    ?assertEqual({yes,"rt ",[]}, ecli_expand:expand(Str, Tree)).
+    {yes, "rt ", Menu} = ecli_expand:expand(Str, Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  port Port\r\n">>, MenuBin).
 
 expand_enum_space_test() ->
     Tree = ecli_test_schema:test_tree(),
     {yes, "", Menu} = ecli_expand:expand("set host speed ", Tree),
     MenuBin = list_to_binary(Menu),
-    ?assertEqual(<<"\r\n  1GbE  1 Gigabit/s Ethernet\r\n  10GbE 10 Gigabit/s Ethernet\r\n">>,
+    ?assertEqual(<<"\r\n  speed Interface speed\r\n  1GbE  1 Gigabit/s Ethernet\r\n  10GbE 10 Gigabit/s Ethernet\r\n">>,
+                 MenuBin).
+
+expand_leaf_existing_value_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    Txn = #{["host", "name"] => "box1"},
+    {yes, "", Menu} = ecli_expand:expand("set host name ", Tree, Txn),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  name Name of host [box1]\r\n">>, MenuBin).
+
+expand_leaf_existing_value_after_name_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    Txn = #{["host", "name"] => "box1"},
+    {yes, "me ", Menu} = ecli_expand:expand("set host na", Tree, Txn),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  name Name of host [box1]\r\n">>, MenuBin).
+
+expand_enum_existing_value_test() ->
+    Tree = ecli_test_schema:test_tree(),
+    Txn = #{["host", "speed"] => "1GbE"},
+    {yes, "", Menu} = ecli_expand:expand("set host speed ", Tree, Txn),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(<<"\r\n  speed Interface speed [1GbE]\r\n  1GbE  1 Gigabit/s Ethernet\r\n  10GbE 10 Gigabit/s Ethernet\r\n">>,
                  MenuBin).
 
 expand_enum_prefix_test() ->

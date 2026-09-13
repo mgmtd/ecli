@@ -152,11 +152,9 @@ parse_leaf([{token, Tok}], EnumValues, Tree, _Item, Acc, _Txn, _Cmd, Pipes) ->
             Menu = ecli:format_menu(Matches),
             {yes, Chars, Menu}
     end;
-parse_leaf([space], [], _Tree, #{node_type := leaf, desc := Desc}, _Acc, _Txn, _Cmd, _Pipes) ->
-    {yes, "", ["\r\n", Desc, "\r\n"]};
-parse_leaf([space], EnumValues, _Tree, #{node_type := leaf}, _Acc, _Txn, _Cmd, _Pipes) ->
-    Menu = ecli:format_menu(EnumValues),
-    {yes, "", Menu};
+parse_leaf([space], _EnumValues, _Tree, #{node_type := NT} = Leaf, Acc, Txn, _Cmd, _Pipes)
+  when NT =:= leaf; NT =:= leaf_list ->
+    {yes, "", leaf_value_prompt(Leaf, Acc, Txn)};
 parse_leaf([space], [], _Tree, _Item, _Acc, _Txn, _Cmd, _Pipes) ->
     no;
 parse_leaf([space], EnumValues, _Tree, _Item, _Acc, _Txn, _Cmd, _Pipes) ->
@@ -234,19 +232,17 @@ expand_after_token(Tok, MenuItems, Acc, Txn, Cmd, Pipes) ->
         [] ->
             no;
         [#cmd{name = Name} = Item] when Name == Tok ->
-            Children = menu_item_children(Item, Txn, Cmd),
             Pipes1 = update_pipes(ecli_util:cmd_to_map(Item), Pipes),
-            Menu = ecli:format_menu(with_pipe(Children, [Item | Acc], Pipes1)),
+            Menu = prompt_after_item(ecli_util:cmd_to_map(Item), Acc, Txn, Cmd, Pipes1),
             {yes, " ", Menu};
         [#{name := Name} = Item] when Name == Tok ->
-            Children = menu_item_children(Item, Txn, Cmd),
             Pipes1 = update_pipes(Item, Pipes),
-            Menu = ecli:format_menu(with_pipe(Children, [Item | Acc], Pipes1)),
+            Menu = prompt_after_item(Item, Acc, Txn, Cmd, Pipes1),
             {yes, " ", Menu};
         [#cmd{name = Name}] ->
             {yes, chars_to_expand(Tok, Name), []};
-        [#{name := Name}] ->
-            {yes, chars_to_expand(Tok, Name), []};
+        [#{name := Name} = Item] ->
+            {yes, chars_to_expand(Tok, Name), leaf_name_help(Item, Acc, Txn)};
         _ ->
             Chars = expand_menus(Tok, Matches),
             Menu = ecli:format_menu(Matches),
@@ -263,33 +259,23 @@ expand_after_space([], Acc, _Txn, _Cmd, Pipes) ->
 expand_after_space(Tree, [#{node_type := leaf, value := _Val} | _] = Acc, _Txn, _Cmd, Pipes) ->
     Menu = ecli:format_menu(with_pipe(Tree, Acc, Pipes)),
     {yes, "", Menu};
-expand_after_space(_Menu, [#{node_type := leaf, desc := Desc, type := Type} | _Acc], _Txn, _Cmd, _Pipes) ->
-    case ecli_types:completions(Type) of
-        [] ->
-            {yes, "", ["\r\n", Desc, "\r\n"]};
-        Tree ->
-            Menu = ecli:format_menu(Tree),
-            {yes, "", Menu}
-    end;
-expand_after_space(_Menu, [#{node_type := leaf, desc := Desc} | _Acc], _Txn, _Cmd, _Pipes) ->
-    {yes, "", ["\r\n", Desc, "\r\n"]};
+expand_after_space(_Menu, [#{node_type := NT} = Leaf | Acc], Txn, _Cmd, _Pipes)
+  when NT =:= leaf; NT =:= leaf_list ->
+    {yes, "", leaf_value_prompt(Leaf, Acc, Txn)};
 expand_after_space([#{name := OneName} = Item], Acc, Txn, Cmd, Pipes) ->
     case has_pipes(Pipes) of
         true ->
             {yes, "", ecli:format_menu(with_pipe([Item], Acc, Pipes))};
         false ->
-            Children = menu_item_children(Item, Txn, Cmd),
-            Menu = ecli:format_menu(Children),
-            {yes, OneName ++ " ", Menu}
+            {yes, OneName ++ " ", prompt_after_item(Item, Acc, Txn, Cmd, Pipes)}
     end;
 expand_after_space([#cmd{name = OneName} = Item], Acc, Txn, Cmd, Pipes) ->
+    Map = ecli_util:cmd_to_map(Item),
     case has_pipes(Pipes) of
         true ->
             {yes, "", ecli:format_menu(with_pipe([Item], Acc, Pipes))};
         false ->
-            Children = menu_item_children(Item, Txn, Cmd),
-            Menu = ecli:format_menu(Children),
-            {yes, OneName ++ " ", Menu}
+            {yes, OneName ++ " ", prompt_after_item(Map, Acc, Txn, Cmd, Pipes)}
     end;
 expand_after_space(Tree, Acc, _Txn, _Cmd, Pipes) ->
     ?DBG("ecli_expand_after_space: fallthorgh = ~p~n",[Tree]),
@@ -335,6 +321,100 @@ remove(Tok, Tree) ->
 %% the items inside the list item, minus the list key names.
 menu_item_children(Item, Txn, CmdType) ->
     ecli_util:children(Item, Txn, CmdType).
+
+%% After a fully matched node: containers show children, leaves show
+%% the leaf name, description, and any stored value.
+prompt_after_item(#{node_type := NT} = Item, Acc, Txn, _Cmd, _Pipes)
+  when NT =:= leaf; NT =:= leaf_list ->
+    leaf_value_prompt(Item, Acc, Txn);
+prompt_after_item(Item, Acc, Txn, Cmd, Pipes) ->
+    Children = menu_item_children(Item, Txn, Cmd),
+    ecli:format_menu(with_pipe(Children, [Item | Acc], Pipes)).
+
+leaf_name_help(#{node_type := NT} = Item, Acc, Txn)
+  when NT =:= leaf; NT =:= leaf_list ->
+    leaf_value_prompt(Item, Acc, Txn);
+leaf_name_help(_, _, _) ->
+    [].
+
+%% Prompt shown once the leaf name is complete and the user is about
+%% to type a value: leaf name, description, [existing] if any, then
+%% enum / boolean choices.
+leaf_value_prompt(Leaf, Acc, Txn) ->
+    Desc0 = maps:get(desc, Leaf, ""),
+    Desc = case existing_value(Leaf, Acc, Txn) of
+               undefined ->
+                   Desc0;
+               Val ->
+                   ValStr = fmt_existing(Leaf, Val),
+                   case Desc0 of
+                       "" -> "[" ++ ValStr ++ "]";
+                       _ -> Desc0 ++ " [" ++ ValStr ++ "]"
+                   end
+           end,
+    Type = maps:get(type, Leaf, undefined),
+    ecli:format_menu([Leaf#{desc => Desc} | ecli_types:completions(Type)]).
+
+existing_value(#{role := cmd}, _Acc, _Txn) ->
+    undefined;
+existing_value(_Leaf, _Acc, Txn) when Txn =:= undefined; Txn =:= no_txn ->
+    undefined;
+existing_value(Leaf, Acc, Txn) ->
+    case callback_mod([Leaf | Acc]) of
+        undefined ->
+            undefined;
+        Mod ->
+            Path = data_path([Leaf | Acc]),
+            try Mod:get_value(Txn, Path) of
+                {ok, undefined} -> undefined;
+                {ok, Val} -> Val;
+                _ -> undefined
+            catch
+                _:_ -> undefined
+            end
+    end.
+
+callback_mod([#{data_callback := Mod} | _]) when Mod =/= undefined ->
+    Mod;
+callback_mod([_ | Rest]) ->
+    callback_mod(Rest);
+callback_mod([]) ->
+    undefined.
+
+data_path(Acc) ->
+    lists:flatmap(fun path_elem/1, lists:reverse(Acc)).
+
+path_elem(#{role := cmd}) ->
+    [];
+path_elem(#{node_type := list, name := Name, key_values := KVs})
+  when is_list(KVs), KVs =/= [] ->
+    [Name, list_to_tuple(KVs)];
+path_elem(#{name := Name}) ->
+    [Name];
+path_elem(_) ->
+    [].
+
+fmt_existing(#{node_type := leaf_list}, Vals) when is_list(Vals) ->
+    lists:flatten(lists:join(" ", [fmt_scalar(V) || V <- Vals]));
+fmt_existing(_Leaf, Val) ->
+    fmt_scalar(Val).
+
+fmt_scalar(Bin) when is_binary(Bin) ->
+    binary_to_list(Bin);
+fmt_scalar(Int) when is_integer(Int) ->
+    integer_to_list(Int);
+fmt_scalar(Atom) when is_atom(Atom) ->
+    atom_to_list(Atom);
+fmt_scalar({A, B, C, D})
+  when is_integer(A), is_integer(B), is_integer(C), is_integer(D) ->
+    lists:flatten(io_lib:format("~p.~p.~p.~p", [A, B, C, D]));
+fmt_scalar(List) when is_list(List) ->
+    case io_lib:printable_unicode_list(List) of
+        true -> List;
+        false -> lists:flatten(io_lib:format("~p", [List]))
+    end;
+fmt_scalar(Else) ->
+    lists:flatten(io_lib:format("~p", [Else])).
 
 %% Find characters to add to fill up to where the node names diverge
 %% e.g. names configure and contain given an input of "c" should return "on"

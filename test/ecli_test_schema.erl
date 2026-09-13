@@ -1,6 +1,16 @@
 -module(ecli_test_schema).
 
--export([test_tree/0]).
+-export([test_tree/0, get_value/2]).
+
+%% Optional data_callback used by expand tests. `Txn` is a map of
+%% `Path => Value` when the test wants to show an existing leaf value.
+get_value(Values, Path) when is_map(Values) ->
+    case maps:find(Path, Values) of
+        {ok, Val} -> {ok, Val};
+        error -> not_found
+    end;
+get_value(_, _) ->
+    not_found.
 
 test_tree() ->
     [#{role => cmd,
@@ -143,14 +153,16 @@ config_host_menu() ->
        node_type => leaf,
        name => "name",
        desc => "Name of host",
-       type => string
+       type => string,
+       data_callback => ecli_test_schema
      },
      #{role => schema,
        node_type => leaf,
        name => "speed",
        desc => "Interface speed",
        type => {enum, [{"1GbE", "1 Gigabit/s Ethernet"},
-                       {"10GbE", "10 Gigabit/s Ethernet"}]}
+                       {"10GbE", "10 Gigabit/s Ethernet"}]},
+       data_callback => ecli_test_schema
      }].
 
 %% Testing list item with multiple keys
