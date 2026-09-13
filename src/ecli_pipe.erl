@@ -361,25 +361,29 @@ to_bin(Io) ->
 %%--------------------------------------------------------------------
 %% Formatters — same tree shape as ecli:format_simple_tree/1
 %% [{Name, {value, Val}} | {Name, {leaf_list, [Val]}} | {Name, Children}]
-%% JSON via json:format/3; XML via xmerl:export_simple/3.
+%% Hand-rolled JSON/XML so this builds on OTP 24 (no json:format/3,
+%% no xmerl_xml_indent).
 %%--------------------------------------------------------------------
 
 format_xml_tree(Tree) ->
-    Simple = {config, [], xml_simple(Tree)},
-    crlf([xmerl:export_simple([Simple], xmerl_xml_indent, [{prolog, ""}]), $\n]).
+    crlf(["<config>\n", xml_elems(Tree, 1), "</config>\n"]).
 
-xml_simple([{Name, {value, Val}} | Ts]) ->
-    [{xml_tag(Name), [], [fmt_value(Val)]} | xml_simple(Ts)];
-xml_simple([{Name, {leaf_list, Vals}} | Ts]) ->
-    Tag = xml_tag(Name),
-    [{Tag, [], [fmt_value(V)]} || V <- Vals] ++ xml_simple(Ts);
-xml_simple([{Name, Children} | Ts]) ->
-    [{xml_tag(Name), [], xml_simple(Children)} | xml_simple(Ts)];
-xml_simple([]) ->
+xml_elems([{Name, {value, Val}} | Ts], Lvl) ->
+    Tag = xml_name(Name),
+    [indent(Lvl), $<, Tag, $>, xml_escape(fmt_value(Val)), $<, $/, Tag, $>, $\n
+     | xml_elems(Ts, Lvl)];
+xml_elems([{Name, {leaf_list, Vals}} | Ts], Lvl) ->
+    Tag = xml_name(Name),
+    [[indent(Lvl), $<, Tag, $>, xml_escape(fmt_value(V)), $<, $/, Tag, $>, $\n]
+     || V <- Vals] ++ xml_elems(Ts, Lvl);
+xml_elems([{Name, Children} | Ts], Lvl) ->
+    Tag = xml_name(Name),
+    [indent(Lvl), $<, Tag, $>, $\n,
+     xml_elems(Children, Lvl + 1),
+     indent(Lvl), $<, $/, Tag, $>, $\n
+     | xml_elems(Ts, Lvl)];
+xml_elems([], _) ->
     [].
-
-xml_tag(Name) ->
-    list_to_atom(xml_name(Name)).
 
 xml_name(Name) ->
     Raw = fmt_name(Name),
@@ -401,15 +405,23 @@ sanitize_xml_char($-) -> $-;
 sanitize_xml_char($.) -> $.;
 sanitize_xml_char(_) -> $_.
 
+xml_escape([]) ->
+    [];
+xml_escape([$< | T]) ->
+    "&lt;" ++ xml_escape(T);
+xml_escape([$> | T]) ->
+    "&gt;" ++ xml_escape(T);
+xml_escape([$& | T]) ->
+    "&amp;" ++ xml_escape(T);
+xml_escape([$" | T]) ->
+    "&quot;" ++ xml_escape(T);
+xml_escape([C | T]) when is_integer(C) ->
+    [C | xml_escape(T)].
+
 format_json_tree(Tree) ->
-    crlf(json:format(json_object(Tree), fun format_json_value/3, #{})).
+    crlf([json_encode(json_object(Tree), 0), $\n]).
 
 %% `{object, Pairs}` keeps tree order and distinguishes `{}` from `[]`.
-format_json_value({object, Pairs}, Encode, State) ->
-    json:format_key_value_list(Pairs, Encode, State);
-format_json_value(Value, Encode, State) ->
-    json:format_value(Value, Encode, State).
-
 json_object(Tree) ->
     {object, [json_pair(P) || P <- Tree]}.
 
@@ -437,6 +449,56 @@ json_encode_value(Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
 json_encode_value(Val) ->
     unicode:characters_to_binary(fmt_value(Val)).
+
+json_encode({object, []}, _Lvl) ->
+    <<"{}">>;
+json_encode({object, Pairs}, Lvl) ->
+    Next = Lvl + 1,
+    [${, $\n, json_encode_pairs(Pairs, Next), $\n, indent(Lvl), $}];
+json_encode(List, _Lvl) when is_list(List) ->
+    [$[, lists:join(", ", [json_encode(V, 0) || V <- List]), $]];
+json_encode(Bin, _Lvl) when is_binary(Bin) ->
+    [$", json_escape(Bin), $"];
+json_encode(Int, _Lvl) when is_integer(Int) ->
+    integer_to_binary(Int);
+json_encode(Float, _Lvl) when is_float(Float) ->
+    float_to_binary(Float, [{decimals, 15}, compact]);
+json_encode(true, _Lvl) ->
+    <<"true">>;
+json_encode(false, _Lvl) ->
+    <<"false">>.
+
+json_encode_pairs([Pair], Lvl) ->
+    json_encode_pair(Pair, Lvl);
+json_encode_pairs([Pair | Rest], Lvl) ->
+    [json_encode_pair(Pair, Lvl), $,, $\n, json_encode_pairs(Rest, Lvl)].
+
+json_encode_pair({Key, Val}, Lvl) ->
+    [indent(Lvl), $", json_escape(Key), "\": ", json_encode(Val, Lvl)].
+
+json_escape(Bin) when is_binary(Bin) ->
+    json_escape(Bin, <<>>).
+
+json_escape(<<>>, Acc) ->
+    Acc;
+json_escape(<<$", Rest/binary>>, Acc) ->
+    json_escape(Rest, <<Acc/binary, "\\\"">>);
+json_escape(<<$\\, Rest/binary>>, Acc) ->
+    json_escape(Rest, <<Acc/binary, "\\\\">>);
+json_escape(<<$\n, Rest/binary>>, Acc) ->
+    json_escape(Rest, <<Acc/binary, "\\n">>);
+json_escape(<<$\r, Rest/binary>>, Acc) ->
+    json_escape(Rest, <<Acc/binary, "\\r">>);
+json_escape(<<$\t, Rest/binary>>, Acc) ->
+    json_escape(Rest, <<Acc/binary, "\\t">>);
+json_escape(<<C, Rest/binary>>, Acc) when C < 32 ->
+    Hex = iolist_to_binary(io_lib:format("\\u~4.16.0b", [C])),
+    json_escape(Rest, <<Acc/binary, Hex/binary>>);
+json_escape(<<C, Rest/binary>>, Acc) ->
+    json_escape(Rest, <<Acc/binary, C>>).
+
+indent(Lvl) ->
+    lists:duplicate(2 * Lvl, $\s).
 
 crlf(Io) ->
     binary:replace(iolist_to_binary(Io), <<"\n">>, <<"\r\n">>, [global]).

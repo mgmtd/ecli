@@ -24,7 +24,7 @@ apply_display_json_test() ->
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
     Json = pipe_bin(ecli_pipe:apply({data, sample_tree()}, [Stage])),
-    Decoded = json:decode(Json),
+    Decoded = decode_json(Json),
     true = is_map(Decoded),
     ?assertEqual(<<"ok">>, maps:get(<<"status">>, Decoded)),
     Host = maps:get(<<"host">>, Decoded),
@@ -39,21 +39,21 @@ apply_display_json_leaf_list_test() ->
     Json = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(#{<<"name">> => <<"box1">>,
                    <<"tags">> => [<<"red">>, <<"green">>, <<"blue">>]},
-                 json:decode(Json)).
+                 decode_json(Json)).
 
 apply_display_json_leaf_list_binaries_test() ->
     Tree = [{"tags", {leaf_list, [<<"red">>, <<"green">>]}}],
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
     Json = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
-    ?assertEqual(#{<<"tags">> => [<<"red">>, <<"green">>]}, json:decode(Json)).
+    ?assertEqual(#{<<"tags">> => [<<"red">>, <<"green">>]}, decode_json(Json)).
 
 apply_display_json_string_leaf_not_array_test() ->
     Tree = [{"name", {value, "box1"}}],
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
     Json = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
-    ?assertEqual(#{<<"name">> => <<"box1">>}, json:decode(Json)).
+    ?assertEqual(#{<<"name">> => <<"box1">>}, decode_json(Json)).
 
 apply_curly_leaf_list_test() ->
     Tree = [{"tags", {leaf_list, ["red", "green"]}}],
@@ -198,3 +198,92 @@ pipe_bin({error, Reason}) ->
     error({pipe_error, Reason});
 pipe_bin(Text) ->
     iolist_to_binary(Text).
+
+%% OTP 24 has no json:decode/1. Enough of JSON for these fixtures.
+decode_json(Bin) when is_binary(Bin) ->
+    {Val, Rest} = json_value(json_skip(unicode:characters_to_list(Bin))),
+    [] = json_skip(Rest),
+    Val.
+
+json_skip([C | T]) when C =< 32 ->
+    json_skip(T);
+json_skip(S) ->
+    S.
+
+json_value([${ | T]) ->
+    json_object(json_skip(T), #{});
+json_value([$[ | T]) ->
+    json_array(json_skip(T), []);
+json_value([$" | T]) ->
+    json_string(T, []);
+json_value([$t, $r, $u, $e | T]) ->
+    {true, T};
+json_value([$f, $a, $l, $s, $e | T]) ->
+    {false, T};
+json_value([$n, $u, $l, $l | T]) ->
+    {null, T};
+json_value([C | _] = T) when C =:= $-; C >= $0, C =< $9 ->
+    json_number(T).
+
+json_object([$} | T], Acc) ->
+    {Acc, T};
+json_object([$" | T], Acc) ->
+    {Key, Rest0} = json_string(T, []),
+    [$: | Rest1] = json_skip(Rest0),
+    {Val, Rest2} = json_value(json_skip(Rest1)),
+    case json_skip(Rest2) of
+        [$, | Rest3] ->
+            json_object(json_skip(Rest3), Acc#{Key => Val});
+        [$} | Rest3] ->
+            {Acc#{Key => Val}, Rest3}
+    end.
+
+json_array([$] | T], Acc) ->
+    {lists:reverse(Acc), T};
+json_array(T, Acc) ->
+    {Val, Rest0} = json_value(T),
+    case json_skip(Rest0) of
+        [$, | Rest1] ->
+            json_array(json_skip(Rest1), [Val | Acc]);
+        [$] | Rest1] ->
+            {lists:reverse([Val | Acc]), Rest1}
+    end.
+
+json_string([$" | T], Acc) ->
+    {unicode:characters_to_binary(lists:reverse(Acc)), T};
+json_string([$\\, $" | T], Acc) ->
+    json_string(T, [$" | Acc]);
+json_string([$\\, $\\ | T], Acc) ->
+    json_string(T, [$\\ | Acc]);
+json_string([$\\, $n | T], Acc) ->
+    json_string(T, [$\n | Acc]);
+json_string([$\\, $r | T], Acc) ->
+    json_string(T, [$\r | Acc]);
+json_string([$\\, $t | T], Acc) ->
+    json_string(T, [$\t | Acc]);
+json_string([C | T], Acc) ->
+    json_string(T, [C | Acc]).
+
+json_number(T) ->
+    {Raw, Rest} = json_number_chars(T, []),
+    case lists:member($., Raw) orelse lists:member($e, Raw)
+         orelse lists:member($E, Raw) of
+        true ->
+            {list_to_float(floatish(Raw)), Rest};
+        false ->
+            {list_to_integer(Raw), Rest}
+    end.
+
+json_number_chars([C | T], Acc) when C >= $0, C =< $9; C =:= $-; C =:= $+;
+                                     C =:= $.; C =:= $e; C =:= $E ->
+    json_number_chars(T, [C | Acc]);
+json_number_chars(T, Acc) ->
+    {lists:reverse(Acc), T}.
+
+floatish(Raw) ->
+    case lists:member($., Raw) of
+        true ->
+            Raw;
+        false ->
+            Raw ++ ".0"
+    end.
