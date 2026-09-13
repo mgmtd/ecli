@@ -134,7 +134,7 @@ parse_list_keys([{token, Tok} | Ts], #{key_names := KeyNames, key_values := KeyV
     KeyValues1 = KeyValues ++ [Tok],
     Item1 = Item#{key_values => KeyValues1},
     if length(KeyNames) == length(KeyValues1) ->
-            Children = ecli_util:children(Item1, Txn, undefined),
+            Children = ecli_util:children(Item1, Txn, maps:get(cmd_type, Item1, undefined)),
             parse(Ts, Children, [Item1 | Acc], Txn, Pipes);
        true ->
             parse_list_keys(Ts, Item1, Acc, Txn, Pipes)
@@ -216,6 +216,9 @@ stage_complete([#{action := {pipe, match}} | _]) ->
 stage_complete([#{action := {pipe, except}} | _]) ->
     false;
 stage_complete([#{action := {pipe, {compare, rollback}}} | _]) ->
+    false;
+stage_complete([#{action := {pipe, {insert, Side}}} | _])
+  when Side =:= before; Side =:= 'after' ->
     false;
 stage_complete([#{action := {pipe, _}} | _]) ->
     true;

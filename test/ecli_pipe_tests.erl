@@ -106,6 +106,25 @@ compare_against_rollback_index_cmd_test() ->
              #{name => "1", action => {pipe, {compare, {rollback, 1}}}}],
     ?assertEqual({rollback, 1}, ecli_pipe:compare_against([Stage])).
 
+set_pipes_catalog_test() ->
+    Names = [maps:get(name, C) || C <- ecli_pipe:catalog(fun ecli_pipe:set_pipes/0)],
+    ?assertEqual(["first", "last", "before", "after"], Names).
+
+insert_where_first_test() ->
+    Stage = [#{name => "first", action => {pipe, {insert, first}}}],
+    ?assertEqual(first, ecli_pipe:insert_where([Stage])),
+    ?assertEqual(undefined, ecli_pipe:insert_where([])).
+
+insert_where_after_value_test() ->
+    Stage = [#{name => "after", action => {pipe, {insert, 'after'}},
+               value => "deny", type => string}],
+    ?assertEqual({'after', {"deny"}}, ecli_pipe:insert_where([Stage])).
+
+insert_where_before_value_test() ->
+    Stage = [#{name => "before", action => {pipe, {insert, before}},
+               value => "allow"}],
+    ?assertEqual({before, {"allow"}}, ecli_pipe:insert_where([Stage])).
+
 config_show_pipes_include_compare_test() ->
     Config = [maps:get(name, C) || C <- ecli_pipe:catalog(fun ecli_pipe:config_show_pipes/0)],
     Oper = [maps:get(name, C) || C <- ecli_pipe:catalog(fun ecli_pipe:show_pipes/0)],

@@ -44,15 +44,20 @@ children(#{node_type := list,
     %% still have it around for the real children.
     KeysSoFar = length(KeyValues),
     KeysNeeded = length(KeyNames),
+    EffectiveCmd = effective_cmd(CmdType, Item),
     if KeysSoFar == KeysNeeded ->
-            %% Now we have all the keys return the child nodes of the list.
-            %% FIXME - remove the list keys from this list
-            FullPath = Path ++ [list_to_tuple(KeyValues)],
-            ?DBG("Full list path ~p~n", [FullPath]),
-            Children = expand_children(Cs, FullPath),
-            ?DBG("Children ~p~n", [Children]),
-            Filtered = filter_list_key_leafs(Children, KeyNames),
-            insert_full_path(Filtered, Path);
+            case {EffectiveCmd, maps:get(ordered_by, Item, system)} of
+                {move, user} ->
+                    where_menu(Item, Txn);
+                _ ->
+                    %% Now we have all the keys return the child nodes of the list.
+                    FullPath = Path ++ [list_to_tuple(KeyValues)],
+                    ?DBG("Full list path ~p~n", [FullPath]),
+                    Children = expand_children(Cs, FullPath),
+                    ?DBG("Children ~p~n", [Children]),
+                    Filtered = filter_list_key_leafs(Children, KeyNames),
+                    insert_full_path(Filtered, FullPath)
+            end;
        true ->
             %% First time: Needed = 2, SoFar == 0, element = 1
             %% 2nd time:   Needed = 2, SoFar = 1, element = 2
@@ -94,7 +99,7 @@ children(#{node_type := list,
             %% new list item. We need to just convince the menu thingy
             %% we are a normal list of children, and we need to keep
             %% enough blah around so we can carry on afterwards
-            case CmdType of
+            case EffectiveCmd of
                 set ->
                     [Template#{node_type => new_list_item} | KeysItems];
                 _ ->
@@ -105,6 +110,78 @@ children(#{node_type := list,
 children(_Item, _, _) ->
     ?DBG("list children falltrhough ~p~n", [_Item]),
     [].
+
+effective_cmd(undefined, Item) ->
+    maps:get(cmd_type, Item, undefined);
+effective_cmd(CmdType, _Item) ->
+    CmdType.
+
+%% After an `ordered-by user` list instance, `move` takes a position
+%% instead of descending into the item's leaves.
+where_menu(#{path := Path, key_values := KeyValues,
+             key_names := KeyNames} = Item, Txn) ->
+    Self = case KeyValues of
+               [Tok] -> Tok;
+               _ -> list_to_tuple(KeyValues)
+           end,
+    Mod = maps:get(data_callback, Item, undefined),
+    Match = list_keys_match(0, length(KeyNames), []),
+    Raw = case Mod of
+              undefined -> [];
+              _ ->
+                  try Mod:list_keys(Txn, Path, Match) of
+                      Keys when is_list(Keys) -> Keys;
+                      _ -> []
+                  catch
+                      _:_ -> []
+                  end
+          end,
+    Others = [K || K <- Raw, K =/= Self],
+    Cmds = [first_pos(), last_pos(),
+            before_pos(Others), after_pos(Others)],
+    insert_full_path([cmd_to_map(C) || C <- Cmds], Path).
+
+first_pos() ->
+    #cmd{name = "first",
+         desc = "Move to the start of the list",
+         action = {move, first}}.
+
+last_pos() ->
+    #cmd{name = "last",
+         desc = "Move to the end of the list",
+         action = {move, last}}.
+
+before_pos(Keys) ->
+    #cmd{name = "before",
+         desc = "Move before an existing list entry",
+         children = fun() -> sibling_cmds(before, Keys) end}.
+
+after_pos(Keys) ->
+    #cmd{name = "after",
+         desc = "Move after an existing list entry",
+         children = fun() -> sibling_cmds('after', Keys) end}.
+
+sibling_cmds(Side, Keys) ->
+    [#cmd{name = key_token(K),
+          desc = "Existing list entry",
+          action = {move, {Side, point_key(K)}}}
+     || K <- Keys].
+
+point_key(K) when is_tuple(K) ->
+    K;
+point_key(K) when is_list(K) ->
+    {K}.
+
+key_token({S}) when is_list(S) ->
+    S;
+key_token(T) when is_tuple(T) ->
+    lists:flatten(lists:join(" ", [fmt_tok(X) || X <- tuple_to_list(T)]));
+key_token(S) when is_list(S) ->
+    S.
+
+fmt_tok(S) when is_list(S) -> S;
+fmt_tok(N) when is_integer(N) -> integer_to_list(N);
+fmt_tok(X) -> lists:flatten(io_lib:format("~p", [X])).
 
 expand_children(F, Path) when is_function(F) ->
     ?DBG("expand children ~p~n", [Path]),

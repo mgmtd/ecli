@@ -13,8 +13,9 @@
 
 -include("../include/ecli.hrl").
 
--export([show_pipes/0, config_show_pipes/0]).
--export([catalog/1, apply/2, wants_defaults/1, wants_compare/1, compare_against/1]).
+-export([show_pipes/0, config_show_pipes/0, set_pipes/0]).
+-export([catalog/1, apply/2, wants_defaults/1, wants_compare/1, compare_against/1,
+         insert_where/1]).
 
 %%--------------------------------------------------------------------
 %% Catalogs
@@ -27,6 +28,38 @@ show_pipes() ->
 %% @doc Pipes for configuration show; adds `display set` and `compare`.
 config_show_pipes() ->
     [display_cmd(config), compare_cmd(), match_cmd(), except_cmd(), count_cmd()].
+
+%% @doc Pipes for `set`. Position modifiers for `ordered-by user` lists
+%% and leaf-lists. Consumed by the set action (`insert_where/1`), not
+%% by the output pipeline. Names match RFC 8040 `insert`.
+set_pipes() ->
+    [first_cmd(), last_cmd(), before_cmd(), after_cmd()].
+
+first_cmd() ->
+    #cmd{name = "first",
+         desc = "Insert at the start of the user-ordered list",
+         action = {pipe, {insert, first}}}.
+
+last_cmd() ->
+    #cmd{name = "last",
+         desc = "Insert at the end of the user-ordered list",
+         action = {pipe, {insert, last}}}.
+
+before_cmd() ->
+    #{role => cmd,
+      node_type => leaf,
+      name => "before",
+      desc => "Insert before an existing list entry",
+      type => string,
+      action => {pipe, {insert, before}}}.
+
+after_cmd() ->
+    #{role => cmd,
+      node_type => leaf,
+      name => "after",
+      desc => "Insert after an existing list entry",
+      type => string,
+      action => {pipe, {insert, 'after'}}}.
 
 %% @doc Expand a `#cmd.pipes` field to a list of maps.
 catalog(undefined) ->
@@ -149,6 +182,44 @@ compare_against([Stage | Rest]) ->
             compare_against(Rest)
     end.
 
+%% @doc Position for an `ordered-by user` `set`. `undefined` if the
+%% command has no insert pipe (RFC default: append / last).
+-spec insert_where(list()) ->
+          undefined | first | last | {before, tuple()} | {'after', tuple()}.
+insert_where([]) ->
+    undefined;
+insert_where([Stage | Rest]) ->
+    case stage_op(Stage) of
+        {insert, first} ->
+            first;
+        {insert, last} ->
+            last;
+        {insert, before} ->
+            {before, insert_point(Stage)};
+        {insert, 'after'} ->
+            {'after', insert_point(Stage)};
+        {insert, Where} ->
+            Where;
+        _ ->
+            insert_where(Rest)
+    end.
+
+insert_point(Stage) ->
+    {insert_point_value(lists:reverse(Stage))}.
+
+insert_point_value([#{value := V} | _]) when is_list(V); is_binary(V); is_integer(V) ->
+    point_str(V);
+insert_point_value([#{name := Name, action := {pipe, {insert, _}}} | _]) ->
+    Name;
+insert_point_value([#{name := Name} | _]) ->
+    Name;
+insert_point_value(_) ->
+    "".
+
+point_str(V) when is_list(V) -> V;
+point_str(V) when is_binary(V) -> unicode:characters_to_list(V);
+point_str(V) when is_integer(V) -> integer_to_list(V).
+
 classify([], Format, Filters) ->
     {Format, lists:reverse(Filters)};
 classify([Stage | Rest], Format, Filters) ->
@@ -162,6 +233,9 @@ classify([Stage | Rest], Format, Filters) ->
             classify(Rest, curly, Filters);
         {compare, _} ->
             classify(Rest, curly, Filters);
+        {insert, _} ->
+            %% Edit modifier; the set action already applied it.
+            classify(Rest, Format, Filters);
         {display, F} ->
             classify(Rest, F, Filters);
         {match, Pat} ->
@@ -188,6 +262,8 @@ stage_op_nodes([#{action := {pipe, {compare, rollback}}, value := N} | _])
 stage_op_nodes([#{value := N}, #{action := {pipe, {compare, rollback}}} | _])
   when is_integer(N) ->
     {compare, {rollback, N}};
+stage_op_nodes([#{action := {pipe, {insert, Where}}} | _]) ->
+    {insert, Where};
 stage_op_nodes([#{action := {pipe, compare}} | _]) ->
     compare;
 stage_op_nodes([#{action := {pipe, match}, value := Pat} | _]) ->
