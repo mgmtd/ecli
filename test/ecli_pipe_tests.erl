@@ -8,14 +8,14 @@ sample_tree() ->
                {"speed", {value, "1GbE"}}]}].
 
 apply_default_curly_test() ->
-    Text = ecli_pipe:apply({data, sample_tree()}, []),
+    Text = pipe_bin(ecli_pipe:apply({data, sample_tree()}, [])),
     ?assertEqual(list_to_binary(ecli:format_simple_tree(sample_tree())),
-                 iolist_to_binary(Text)).
+                 Text).
 
 apply_display_xml_test() ->
     Stage = [#{name => "display"},
              #{name => "xml", action => {pipe, {display, xml}}}],
-    Xml = iolist_to_binary(ecli_pipe:apply({data, sample_tree()}, [Stage])),
+    Xml = pipe_bin(ecli_pipe:apply({data, sample_tree()}, [Stage])),
     ?assertEqual(true, binary:match(Xml, <<"<config>">>) =/= nomatch),
     ?assertEqual(true, binary:match(Xml, <<"<status>ok</status>">>) =/= nomatch),
     ?assertEqual(true, binary:match(Xml, <<"<speed>1GbE</speed>">>) =/= nomatch).
@@ -23,17 +23,20 @@ apply_display_xml_test() ->
 apply_display_json_test() ->
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
-    Json = iolist_to_binary(ecli_pipe:apply({data, sample_tree()}, [Stage])),
+    Json = pipe_bin(ecli_pipe:apply({data, sample_tree()}, [Stage])),
     Decoded = json:decode(Json),
+    true = is_map(Decoded),
     ?assertEqual(<<"ok">>, maps:get(<<"status">>, Decoded)),
-    ?assertEqual(<<"1GbE">>, maps:get(<<"speed">>, maps:get(<<"host">>, Decoded))).
+    Host = maps:get(<<"host">>, Decoded),
+    true = is_map(Host),
+    ?assertEqual(<<"1GbE">>, maps:get(<<"speed">>, Host)).
 
 apply_display_json_leaf_list_test() ->
     Tree = [{"name", {value, "box1"}},
             {"tags", {leaf_list, ["red", "green", "blue"]}}],
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
-    Json = iolist_to_binary(ecli_pipe:apply({data, Tree}, [Stage])),
+    Json = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(#{<<"name">> => <<"box1">>,
                    <<"tags">> => [<<"red">>, <<"green">>, <<"blue">>]},
                  json:decode(Json)).
@@ -42,14 +45,14 @@ apply_display_json_leaf_list_binaries_test() ->
     Tree = [{"tags", {leaf_list, [<<"red">>, <<"green">>]}}],
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
-    Json = iolist_to_binary(ecli_pipe:apply({data, Tree}, [Stage])),
+    Json = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(#{<<"tags">> => [<<"red">>, <<"green">>]}, json:decode(Json)).
 
 apply_display_json_string_leaf_not_array_test() ->
     Tree = [{"name", {value, "box1"}}],
     Stage = [#{name => "display"},
              #{name => "json", action => {pipe, {display, json}}}],
-    Json = iolist_to_binary(ecli_pipe:apply({data, Tree}, [Stage])),
+    Json = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(#{<<"name">> => <<"box1">>}, json:decode(Json)).
 
 apply_curly_leaf_list_test() ->
@@ -61,7 +64,7 @@ apply_xml_leaf_list_test() ->
     Tree = [{"tags", {leaf_list, ["red", "green"]}}],
     Stage = [#{name => "display"},
              #{name => "xml", action => {pipe, {display, xml}}}],
-    Xml = iolist_to_binary(ecli_pipe:apply({data, Tree}, [Stage])),
+    Xml = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(true, binary:match(Xml, <<"<tags>red</tags>">>) =/= nomatch),
     ?assertEqual(true, binary:match(Xml, <<"<tags>green</tags>">>) =/= nomatch).
 
@@ -69,13 +72,13 @@ apply_set_leaf_list_test() ->
     Tree = [{"tags", {leaf_list, ["red", "green"]}}],
     Stage = [#{name => "display"},
              #{name => "set", action => {pipe, {display, set}}}],
-    Set = iolist_to_binary(ecli_pipe:apply({data, Tree}, [Stage])),
+    Set = pipe_bin(ecli_pipe:apply({data, Tree}, [Stage])),
     ?assertEqual(<<"set tags red\r\nset tags green\r\n">>, Set).
 
 apply_display_defaults_test() ->
     Stage = [#{name => "display"},
              #{name => "defaults", action => {pipe, {display, defaults}}}],
-    Text = iolist_to_binary(ecli_pipe:apply({data, sample_tree()}, [Stage])),
+    Text = pipe_bin(ecli_pipe:apply({data, sample_tree()}, [Stage])),
     ?assertEqual(list_to_binary(ecli:format_simple_tree(sample_tree())), Text),
     ?assertEqual(true, ecli_pipe:wants_defaults([Stage])),
     ?assertEqual(false, ecli_pipe:wants_defaults([])).
@@ -87,7 +90,7 @@ apply_compare_passthrough_test() ->
     ?assertEqual(false, ecli_pipe:wants_compare([])),
     ?assertEqual(session, ecli_pipe:compare_against([Stage])),
     ?assertEqual(false, ecli_pipe:compare_against([])),
-    Out = iolist_to_binary(ecli_pipe:apply(Text, [Stage])),
+    Out = pipe_bin(ecli_pipe:apply(Text, [Stage])),
     ?assertEqual(list_to_binary(Text), Out).
 
 compare_against_rollback_leaf_test() ->
@@ -118,7 +121,7 @@ config_show_pipes_include_compare_test() ->
 apply_display_set_test() ->
     Stage = [#{name => "display"},
              #{name => "set", action => {pipe, {display, set}}}],
-    Set = iolist_to_binary(ecli_pipe:apply({data, sample_tree()}, [Stage])),
+    Set = pipe_bin(ecli_pipe:apply({data, sample_tree()}, [Stage])),
     ?assertEqual(true, binary:match(Set, <<"set status ok">>) =/= nomatch),
     ?assertEqual(true, binary:match(Set, <<"set host speed 1GbE">>) =/= nomatch).
 
@@ -126,13 +129,13 @@ apply_match_count_test() ->
     Text = "alpha\r\nbeta\r\nalpha2\r\n",
     Match = [#{name => "match", action => {pipe, match}, value => "alpha"}],
     Count = [#{name => "count", action => {pipe, count}}],
-    Out = iolist_to_binary(ecli_pipe:apply(Text, [Match, Count])),
+    Out = pipe_bin(ecli_pipe:apply(Text, [Match, Count])),
     ?assertEqual(<<"Count: 2 lines\r\n">>, Out).
 
 apply_except_test() ->
     Text = "keep\r\ndrop me\r\nkeep too\r\n",
     Except = [#{name => "except", action => {pipe, except}, value => "drop"}],
-    Out = iolist_to_binary(ecli_pipe:apply(Text, [Except])),
+    Out = pipe_bin(ecli_pipe:apply(Text, [Except])),
     ?assertEqual(<<"keep\r\nkeep too\r\n">>, Out).
 
 apply_display_on_text_errors_test() ->
@@ -170,3 +173,9 @@ run_match_then_display_still_xml_test() ->
     Bin = iolist_to_binary(Out),
     ?assertEqual(true, binary:match(Bin, <<"<speed>1GbE</speed>">>) =/= nomatch),
     ?assertEqual(nomatch, binary:match(Bin, <<"<status>">>)).
+
+-spec pipe_bin(iodata() | {error, string()}) -> binary().
+pipe_bin({error, Reason}) ->
+    error({pipe_error, Reason});
+pipe_bin(Text) ->
+    iolist_to_binary(Text).

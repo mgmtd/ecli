@@ -43,7 +43,7 @@ print(#term{llen = Llen, lpos = Lpos}) ->
     lists:flatten(["Lpos = ", integer_to_list(Lpos), " Llen = ", integer_to_list(Llen)]).
 
 
--spec new(binary()) -> {ok, {iolist(), #term{}}} | {error, term()}.
+-spec new(binary()) -> {ok, #term{}} | {error, term()}.
 new(MetaLine) ->
     case binary:split(MetaLine, <<",">>, [global]) of
         [<<"cli:1">>, <<Isatty>>, Rows, Cols, Term] ->

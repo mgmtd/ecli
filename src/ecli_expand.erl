@@ -299,11 +299,11 @@ expand_after_space(Tree, Acc, _Txn, _Cmd, Pipes) ->
 filter_by_prefix(_Str, []) ->
     [];
 filter_by_prefix(Str, Menu) ->
-    lists:filter(fun(#{name := Name}) ->
-                         lists:prefix(Str, Name);
-                    (#cmd{name = Name}) ->
-                         lists:prefix(Str, Name)
-                 end, Menu).
+    lists:filter(fun(Item) -> lists:prefix(Str, item_name(Item)) end, Menu).
+
+item_name(#{name := Name}) when is_list(Name) -> Name;
+item_name(#cmd{name = Name}) -> Name;
+item_name(_) -> "".
 
 chars_to_expand("", Match) -> Match ++ " ";
 chars_to_expand(Str, Match) ->
@@ -341,14 +341,11 @@ menu_item_children(Item, Txn, CmdType) ->
 expand_menus(Str, Menus) ->
     %% ?DBG("ecli_expand:expand_menus ~p~n ~p ~n",[Str, Menus]),
     StrLen = length(Str),
-    Suffixes = lists:map(fun(#{name := Name}) ->
-                                 lists:nthtail(StrLen, Name);
-                            (#cmd{name = Name}) ->
-                                 lists:nthtail(StrLen, Name)
-                         end, Menus),
+    Suffixes = [lists:nthtail(StrLen, item_name(I)) || I <- Menus],
     %% ?DBG("expand_menus ML = ~p~n",[Suffixes]),
     longest_common_prefix(Suffixes).
 
+-spec longest_common_prefix([string()]) -> string().
 longest_common_prefix(Strings) ->
     longest_common_prefix(Strings, []).
 

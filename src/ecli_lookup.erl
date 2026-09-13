@@ -26,6 +26,8 @@
 %% schema nodes for the full path to the node matched, and Tail is the
 %% string following the final schema node if any.
 
+-spec lookup(string(), list(), term()) ->
+          {ok, [map()], [map()], [[map()]]} | {error, string()}.
 lookup(Str, Tree, Txn) ->
     ?DBG("lookup ~p~n Tree: ~p~n Txn:~p~n",[Str, Tree, Txn]),
     case ecli_tokenise:string(Str) of

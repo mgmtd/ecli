@@ -65,7 +65,7 @@ expand(Str, Tree, UserTxn) ->
 %%      `PipeStages' is `[]' when the command has no `|` modifiers.
 %% @end
 %%--------------------------------------------------------------------
--spec lookup(Path::string(), Tree::term(), term()) ->
+-spec lookup(Path::string(), Tree::list(), term()) ->
           {ok, list(), list(), list()} | {error, string()}.
 lookup(Str, Tree, Txn) ->
     ecli_lookup:lookup(Str, Tree, Txn).
@@ -168,9 +168,11 @@ next_list_key([_Name|Ns], [_Key|Ks]) ->
 max_cmd_len([]) ->
     0;
 max_cmd_len(Items) ->
-    lists:max(lists:map(fun(#{name := Name}) -> length(Name);
-                           (#cmd{name = Name}) -> length(Name)
-                        end, Items)).
+    lists:max([name_len(I) || I <- Items]).
+
+name_len(#{name := Name}) when is_list(Name) -> length(Name);
+name_len(#cmd{name = Name}) -> length(Name);
+name_len(_) -> 0.
 
 format_simple_tree(Tree) ->
     format_simple_tree(Tree, 0).
@@ -221,40 +223,49 @@ format_value(Atom) when is_atom(Atom) -> atom_to_list(Atom);
 format_value({A,B,C,D}) -> integer_to_list(A) ++ "." ++ integer_to_list(B) ++ "." ++ integer_to_list(C) ++ "." ++ integer_to_list(D);
 format_value(Else) -> io_lib:format("~p", [Else]).
 
+-spec format_table([#{term() => term()}], [term()]) -> iolist().
 format_table([#{} | _] = Maps, TitlesInOrder) ->
-    TitleLengths = lists:map(fun(T) -> {T, key_size(T)} end, TitlesInOrder),
-    Lengths = maps:from_list(TitleLengths),
-    ColLengths = lists:foldl(
-                   fun(M, Ls) ->
-                           maps:fold(fun(K, V, L) ->
-                                             maps:put(K, max(maps:get(K, L), printable_size(V)), L)
-                                     end, Ls, M)
-                   end, Lengths, Maps),
-    OrderedColLengths = lists:map(fun(T) -> {T, maps:get(T, ColLengths)} end, TitlesInOrder),
+    Lengths = maps:from_list([{T, key_size(T)} || T <- TitlesInOrder]),
+    ColLengths = lists:foldl(fun widen_row/2, Lengths, Maps),
+    OrderedColLengths = [{T, maps:get(T, ColLengths)} || T <- TitlesInOrder],
     TitleRow = pad_row(OrderedColLengths),
-    TitleUnderline = pad_row(lists:map(fun({T, L}) -> {list_to_binary(lists:duplicate(printable_size(T), $-)), L} end, OrderedColLengths)),
-    Rows = lists:map(fun(Row) ->
-                             RowWithLengths = lists:map(fun(T) -> {maps:get(T, Row), maps:get(T, ColLengths)} end, TitlesInOrder),
-                             [pad_row(RowWithLengths), "\r\n"]
-                     end, Maps),
+    TitleUnderline = pad_row([{dash_cell(T), L} || {T, L} <- OrderedColLengths]),
+    Rows = [[pad_row([{maps:get(T, Row), maps:get(T, ColLengths)}
+                      || T <- TitlesInOrder]), "\r\n"]
+            || Row <- Maps],
     [TitleRow, "\r\n", TitleUnderline, "\r\n", Rows].
+
+widen_row(M, Ls) ->
+    maps:fold(fun(K, V, L) ->
+                      maps:put(K, max(maps:get(K, L), printable_size(V)), L)
+              end, Ls, M).
+
+dash_cell(T) ->
+    list_to_binary(lists:duplicate(printable_size(T), $-)).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec key_size(term()) -> integer().
 key_size(Bin) when is_binary(Bin) -> size(Bin);
 key_size(Atom) when is_atom(Atom) -> length(atom_to_list(Atom));
-key_size(Str) when is_list(Str) -> length(Str).
+key_size(Str) when is_list(Str) -> length(Str);
+key_size(_) -> 0.
 
+-spec printable_size(term()) -> integer().
 printable_size(Int) when is_integer(Int) -> size(integer_to_binary(Int));
 printable_size(Atom) when is_atom(Atom) -> length(atom_to_list(Atom));
-printable_size(V) -> iolist_size(V).
+printable_size(V) -> iolist_size(iodata(V)).
+
+-spec iodata(eqwalizer:dynamic()) -> iodata().
+iodata(V) -> V.
 
 pad(Val, Len) ->
     Sz = key_size(Val),
     Pad = max(0, Len - Sz),
     [Val, spaces(Pad)].
 
+-spec pad_row([{term(), integer()}]) -> iolist().
 pad_row([]) ->
     [];
 pad_row([{Val, _Len}]) ->

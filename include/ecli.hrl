@@ -11,7 +11,7 @@
        name :: string(),
        desc = "" :: string(),
        action :: undefined | fun() | {pipe, term()},
-       children = fun() -> [] end :: fun(() -> list()) | list(),
+       children = fun() -> [] end :: fun(() -> list()) | fun((term()) -> list()) | list(),
        list_action = show :: show | set,
        %% Pipe catalog for `|` after this command and its descendants.
        %% `undefined` inherits from the parent; `[]` disables pipes.

@@ -1,1 +1,5 @@
-[].
+[{<<"eqwalizer_support">>,
+  {git_subdir,"https://github.com/whatsapp/erlang-language-platform.git",
+              {ref,"8ecd7f2aa89cd93c3740811aea025d08c34189e3"},
+              "eqwalizer/eqwalizer_support"},
+  0}].

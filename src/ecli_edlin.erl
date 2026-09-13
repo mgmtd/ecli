@@ -22,7 +22,7 @@
 %%--------------------------------------------------------------------
 %% Create a new instance of edlin.
 %% --------------------------------------------------------------------
--spec start(Prompt::string()) -> #edlin{}.
+-spec start(Prompt::string()) -> {#edlin{}, list()}.
 start(Prompt) when is_list(Prompt) ->
     {#edlin{prompt = Prompt}, [{put_chars,unicode,Prompt}]}.
 
@@ -32,7 +32,7 @@ start(Prompt) when is_list(Prompt) ->
 %% complete commands to the history, but it passes the whole history fresh to us as
 %% we have the mechanisms to move around it. We are free to edit our copy as
 %% much as we like, but we always get a fresh one after each command
--spec start(Prompt::string(), {list(), list()}) -> #edlin{}.
+-spec start(Prompt::string(), History::list()) -> {#edlin{}, list()}.
 start(Prompt, History) when is_list(Prompt), is_list(History) ->
     {#edlin{prompt = Prompt, history = ecli_history:new(History)}, [{put_chars,unicode,Prompt}]}.
 
@@ -260,10 +260,10 @@ do_op(kill_line, Bef, Aft, Rs) ->
     put(kill_buffer, Aft),
     {{Bef,[]},[{delete_chars,cp_len(Aft), []}|Rs]};
 do_op(yank, Bef, [], Rs) ->
-    Kill = get(kill_buffer),
+    Kill = kill_chars(),
     {{lists:reverse(Kill, Bef),[]},[{put_chars, unicode,Kill}|Rs]};
 do_op(yank, Bef, Aft, Rs) ->
-    Kill = get(kill_buffer),
+    Kill = kill_chars(),
     {{lists:reverse(Kill, Bef),Aft},[{insert_chars, unicode,Kill, Aft}|Rs]};
 do_op(forward_char, Bef, [C|Aft], Rs) ->
     {{[C|Bef],Aft},[{move_rel,gc_len(C)}|Rs]};
@@ -348,7 +348,16 @@ insert_chars(Pbs, Chars, Rs) ->
     [{put_chars, unicode, Chars},{put_chars, unicode,Pbs} | Rs].
 
 get_line(Bef, Aft) ->
-    unicode:characters_to_list(lists:reverse(Bef, Aft)).
+    unicode:characters_to_list(line_chardata(lists:reverse(Bef, Aft))).
+
+kill_chars() ->
+    case get(kill_buffer) of
+        Cs when is_list(Cs) -> Cs;
+        _ -> []
+    end.
+
+-spec line_chardata(eqwalizer:dynamic()) -> unicode:chardata().
+line_chardata(Cs) -> Cs.
 
 %% Grapheme length in codepoints
 gc_len(CP) when is_integer(CP) -> 1;

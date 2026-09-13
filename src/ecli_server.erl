@@ -42,7 +42,8 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(pid(), inet:socket(), atom()) -> {ok, pid()}.
+-spec start_link(pid(), inet:socket(), atom()) ->
+          {ok, pid()} | {error, term()} | ignore.
 start_link(ListenPid, ListenSocket, CliMod) ->
     gen_server:start_link(?MODULE, [ListenPid, ListenSocket, CliMod], []).
 
