@@ -14,7 +14,7 @@
 -include("../include/ecli.hrl").
 
 -export([show_pipes/0, config_show_pipes/0]).
--export([catalog/1, apply/2, wants_defaults/1]).
+-export([catalog/1, apply/2, wants_defaults/1, wants_compare/1, compare_against/1]).
 
 %%--------------------------------------------------------------------
 %% Catalogs
@@ -24,9 +24,9 @@
 show_pipes() ->
     [display_cmd(operational), match_cmd(), except_cmd(), count_cmd()].
 
-%% @doc Pipes for configuration show; adds `display set`.
+%% @doc Pipes for configuration show; adds `display set` and `compare`.
 config_show_pipes() ->
-    [display_cmd(config), match_cmd(), except_cmd(), count_cmd()].
+    [display_cmd(config), compare_cmd(), match_cmd(), except_cmd(), count_cmd()].
 
 %% @doc Expand a `#cmd.pipes` field to a list of maps.
 catalog(undefined) ->
@@ -90,6 +90,20 @@ count_cmd() ->
          desc = "Count the number of lines in the output",
          action = {pipe, count}}.
 
+compare_cmd() ->
+    #cmd{name = "compare",
+         desc = "Show changes in the current configuration session",
+         action = {pipe, compare},
+         children = fun compare_children/0}.
+
+compare_children() ->
+    [#{role => cmd,
+       node_type => leaf,
+       name => "rollback",
+       desc => "Compare against a numbered rollback snapshot",
+       type => integer,
+       action => {pipe, {compare, rollback}}}].
+
 %%--------------------------------------------------------------------
 %% Apply
 %%--------------------------------------------------------------------
@@ -113,6 +127,28 @@ wants_defaults(Stages) ->
     lists:any(fun(Stage) -> stage_op(Stage) =:= {display, defaults} end,
               Stages).
 
+%% @doc True if any pipe stage is `compare` (with or without `rollback N`).
+%% The action should return session-diff text (an iolist), not `{data, Tree}`.
+-spec wants_compare(list()) -> boolean().
+wants_compare(Stages) ->
+    compare_against(Stages) =/= false.
+
+%% @doc Baseline for a `compare` pipe.
+%% `false` if the command is not a compare; `session` for bare `compare`;
+%% `{rollback, N}` for `compare rollback N`.
+-spec compare_against(list()) -> false | session | {rollback, integer()}.
+compare_against([]) ->
+    false;
+compare_against([Stage | Rest]) ->
+    case stage_op(Stage) of
+        compare ->
+            session;
+        {compare, Against} ->
+            Against;
+        _ ->
+            compare_against(Rest)
+    end.
+
 classify([], Format, Filters) ->
     {Format, lists:reverse(Filters)};
 classify([Stage | Rest], Format, Filters) ->
@@ -120,6 +156,11 @@ classify([Stage | Rest], Format, Filters) ->
         {display, defaults} ->
             %% Fill defaults in the action; render as curly unless a
             %% later display xml/json/set overrides.
+            classify(Rest, curly, Filters);
+        compare ->
+            %% Action returns compare text; keep curly so iolist passes through.
+            classify(Rest, curly, Filters);
+        {compare, _} ->
             classify(Rest, curly, Filters);
         {display, F} ->
             classify(Rest, F, Filters);
@@ -138,6 +179,17 @@ stage_op(Stage) when is_list(Stage) ->
 
 stage_op_nodes([#{action := {pipe, {display, F}}} | _]) ->
     {display, F};
+stage_op_nodes([#{action := {pipe, {compare, {rollback, N}}}} | _])
+  when is_integer(N) ->
+    {compare, {rollback, N}};
+stage_op_nodes([#{action := {pipe, {compare, rollback}}, value := N} | _])
+  when is_integer(N) ->
+    {compare, {rollback, N}};
+stage_op_nodes([#{value := N}, #{action := {pipe, {compare, rollback}}} | _])
+  when is_integer(N) ->
+    {compare, {rollback, N}};
+stage_op_nodes([#{action := {pipe, compare}} | _]) ->
+    compare;
 stage_op_nodes([#{action := {pipe, match}, value := Pat} | _]) ->
     {match, Pat};
 stage_op_nodes([#{action := {pipe, except}, value := Pat} | _]) ->

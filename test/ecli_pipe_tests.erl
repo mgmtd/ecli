@@ -80,6 +80,41 @@ apply_display_defaults_test() ->
     ?assertEqual(true, ecli_pipe:wants_defaults([Stage])),
     ?assertEqual(false, ecli_pipe:wants_defaults([])).
 
+apply_compare_passthrough_test() ->
+    Stage = [#{name => "compare", action => {pipe, compare}}],
+    Text = "[edit]\r\n+  host {\r\n+    name box1;\r\n+  }\r\n",
+    ?assertEqual(true, ecli_pipe:wants_compare([Stage])),
+    ?assertEqual(false, ecli_pipe:wants_compare([])),
+    ?assertEqual(session, ecli_pipe:compare_against([Stage])),
+    ?assertEqual(false, ecli_pipe:compare_against([])),
+    Out = iolist_to_binary(ecli_pipe:apply(Text, [Stage])),
+    ?assertEqual(list_to_binary(Text), Out).
+
+compare_against_rollback_leaf_test() ->
+    Stage = [#{name => "compare", action => {pipe, compare}},
+             #{name => "rollback", action => {pipe, {compare, rollback}},
+               value => 1, type => integer}],
+    ?assertEqual(true, ecli_pipe:wants_compare([Stage])),
+    ?assertEqual({rollback, 1}, ecli_pipe:compare_against([Stage])).
+
+compare_against_rollback_index_cmd_test() ->
+    Stage = [#{name => "compare", action => {pipe, compare}},
+             #{name => "rollback"},
+             #{name => "1", action => {pipe, {compare, {rollback, 1}}}}],
+    ?assertEqual({rollback, 1}, ecli_pipe:compare_against([Stage])).
+
+config_show_pipes_include_compare_test() ->
+    Config = [maps:get(name, C) || C <- ecli_pipe:catalog(fun ecli_pipe:config_show_pipes/0)],
+    Oper = [maps:get(name, C) || C <- ecli_pipe:catalog(fun ecli_pipe:show_pipes/0)],
+    ?assertEqual(true, lists:member("compare", Config)),
+    ?assertEqual(false, lists:member("compare", Oper)),
+    Compare = lists:keyfind("compare", 1,
+                            [{maps:get(name, C), C}
+                             || C <- ecli_pipe:catalog(fun ecli_pipe:config_show_pipes/0)]),
+    {_, #{children := KidsFun}} = Compare,
+    KidNames = [maps:get(name, K) || K <- ecli_pipe:catalog(KidsFun)],
+    ?assertEqual(true, lists:member("rollback", KidNames)).
+
 apply_display_set_test() ->
     Stage = [#{name => "display"},
              #{name => "set", action => {pipe, {display, set}}}],

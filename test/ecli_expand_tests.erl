@@ -1,6 +1,7 @@
 -module(ecli_expand_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ecli/include/ecli.hrl").
 
 expand_menu_test() ->
     Tree = ecli_test_schema:test_tree(),
@@ -112,6 +113,15 @@ expand_pipe_display_children_test() ->
     ?assertEqual(true, binary:match(MenuBin, <<"xml">>) =/= nomatch),
     ?assertEqual(true, binary:match(MenuBin, <<"json">>) =/= nomatch),
     ?assertEqual(true, binary:match(MenuBin, <<"defaults">>) =/= nomatch).
+
+expand_compare_rollback_test() ->
+    Tree = [#cmd{name = "show",
+                 desc = "Show configuration",
+                 action = fun(_, _, _) -> {ok, ""} end,
+                 pipes = fun ecli_pipe:config_show_pipes/0}],
+    {yes, "", Menu} = ecli_expand:expand("show | compare ", Tree),
+    MenuBin = list_to_binary(Menu),
+    ?assertEqual(true, binary:match(MenuBin, <<"rollback">>) =/= nomatch).
 
 expand_pipe_after_space_offers_pipe_test() ->
     Tree = ecli_test_schema:test_tree(),

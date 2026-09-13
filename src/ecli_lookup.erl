@@ -213,6 +213,8 @@ stage_complete([#{action := {pipe, match}} | _]) ->
     false;
 stage_complete([#{action := {pipe, except}} | _]) ->
     false;
+stage_complete([#{action := {pipe, {compare, rollback}}} | _]) ->
+    false;
 stage_complete([#{action := {pipe, _}} | _]) ->
     true;
 stage_complete([#{value := _} | _]) ->

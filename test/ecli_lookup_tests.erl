@@ -1,6 +1,7 @@
 -module(ecli_lookup_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ecli/include/ecli.hrl").
 
 %% data_callback for list-key completion; unused once keys are in the command.
 -export([list_keys/3]).
@@ -121,3 +122,32 @@ lookup_trailing_pipe_test() ->
     Tree = ecli_test_schema:test_tree(),
     ?assertEqual({error, "Incomplete command"},
                  ecli_lookup:lookup("show status |", Tree, undefined)).
+
+config_show_tree() ->
+    [#cmd{name = "show",
+          desc = "Show configuration",
+          action = fun(_, _, _) -> {ok, ""} end,
+          pipes = fun ecli_pipe:config_show_pipes/0}].
+
+lookup_compare_test() ->
+    Tree = config_show_tree(),
+    {ok, Cmd, _Items, [Stage]} =
+        ecli_lookup:lookup("show | compare", Tree, undefined),
+    ?assertEqual(["show"], [maps:get(name, C) || C <- Cmd]),
+    ?assertEqual(session, ecli_pipe:compare_against([Stage])).
+
+lookup_compare_rollback_test() ->
+    Tree = config_show_tree(),
+    {ok, _Cmd, _Items, [Stage]} =
+        ecli_lookup:lookup("show | compare rollback 1", Tree, undefined),
+    ?assertEqual({rollback, 1}, ecli_pipe:compare_against([Stage])).
+
+lookup_compare_rollback_incomplete_test() ->
+    Tree = config_show_tree(),
+    ?assertEqual({error, "Incomplete command"},
+                 ecli_lookup:lookup("show | compare rollback", Tree, undefined)).
+
+lookup_compare_rollback_not_integer_test() ->
+    Tree = config_show_tree(),
+    ?assertMatch({error, _},
+                 ecli_lookup:lookup("show | compare rollback x", Tree, undefined)).
