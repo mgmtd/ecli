@@ -108,8 +108,8 @@ Todo
 Many things:
 
 - [ ] Hook up sigwinch events in cli and pass up to server
-- [ ] Grab the user details from the unix domain socket and pass to an
-      authorisation callback of some kind.
+- [x] Grab the user details from the unix domain socket and pass to
+      `init/1`. Filter commands with `ecli:permit/2`.
 - [ ] Provide a way for cli to connect to different unix domain paths
 - [x] Completion of value types - strings, leaf lists, enums
 - [ ] Use the values extracted from terminfo properly

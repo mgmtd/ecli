@@ -51,8 +51,8 @@ new(MetaLine) ->
                          rows = parse_int(Rows),
                          cols = parse_int(Cols),
                          isatty = parse_bool(Isatty),
-                         llen = 0,           % current line length
-                         lpos = 0,           % current cursor position
+                         llen = 0,
+                         lpos = 0,
                          term = Term
                         },
             {ok, CliTerm};

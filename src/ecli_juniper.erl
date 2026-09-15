@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(ecli_juniper).
 
--export([init/0, banner/1, prompt/1, mode_after_exit/1, expand/2, execute/2]).
+-export([init/0, init/1, banner/1, prompt/1, mode_after_exit/1, expand/2, execute/2]).
 
 -include("../include/ecli.hrl").
 
@@ -20,6 +20,9 @@
 %% CLI behaviour mandatory callbacks
 %%--------------------------------------------------------------------
 init() ->
+    init(#{}).
+
+init(_Peer) ->
     {ok, #cli_juniper{}}.
 
 banner(#cli_juniper{}) ->

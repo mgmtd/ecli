@@ -29,6 +29,7 @@
          ecli_state,          % State threaded through cli callbacks
          history = [],     % command line history for this session
          got_meta = false,
+         peer = #{},
          buf = <<>>                     % Temp buf for UTF boundaries
         }).
 
@@ -115,33 +116,38 @@ handle_info(start_accepting, #state{listen_socket = Ls, listen_pid = Lp} = State
         {ok, Socket} ->
             ecli_unixdom_listen:notify_connection_established(Lp),
             inet:setopts(Socket, [{active, once}]),
-            {noreply, State#state{socket = Socket}};
+            {noreply, State#state{socket = Socket,
+                                  peer = ecli_unix:peercred(Socket)}};
         {error, _Reason} ->
             %% Listen socket closed during normal shutdown
             {stop, normal, State}
     end;
 handle_info({tcp, Socket, Data}, #state{got_meta = false,
-                                        ecli_mod = CliMod} = State) ->
+                                        ecli_mod = CliMod,
+                                        peer = Peer} = State) ->
     %% Initialise terminal with metadata received from the cli C program
-    {ok, Term} = ecli_term:new(Data),
-
-    %% Fetch the initial callback module state
-    {ok, CliState} = CliMod:init(),
-
-    %% Send user defined banner
-    {ok, Banner} = CliMod:banner(CliState),
-    ok = gen_tcp:send(Socket, Banner),
-
-    %% Set up edlin with the intial prompt
-    {ok, Prompt} = CliMod:prompt(CliState),
-    {Edlin, InitialOps} = ecli_edlin:start(Prompt),
-    Term1 = send_drv(InitialOps, Socket, Term),
-
-    %% Start Fetching user input from the cli program
-    inet:setopts(Socket, [{active, once}]),
-
-    {noreply, State#state{got_meta = true, term = Term1,
-                          edlin = Edlin, ecli_state = CliState}};
+    case ecli_term:new(Data) of
+        {error, _} ->
+            gen_tcp:close(Socket),
+            {stop, normal, State};
+        {ok, Term} ->
+            case init_cli(CliMod, Peer) of
+                {error, Reason} ->
+                    _ = gen_tcp:send(Socket, deny_banner(Reason)),
+                    gen_tcp:close(Socket),
+                    {stop, normal, State};
+                {ok, CliState} ->
+                    {ok, Banner} = CliMod:banner(CliState),
+                    ok = gen_tcp:send(Socket, Banner),
+                    {ok, Prompt} = CliMod:prompt(CliState),
+                    {Edlin, InitialOps} = ecli_edlin:start(Prompt),
+                    Term1 = send_drv(InitialOps, Socket, Term),
+                    inet:setopts(Socket, [{active, once}]),
+                    {noreply, State#state{got_meta = true, term = Term1,
+                                          edlin = Edlin,
+                                          ecli_state = CliState}}
+            end
+    end;
 handle_info({tcp, _Socket, Data}, #state{buf = Buf} = State) ->
     %% ?DBG("GOT ~p~n",[Data]),
     %% We received one or more chars. Normal chars get appended to the
@@ -207,6 +213,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+init_cli(Mod, Peer) ->
+    _ = code:ensure_loaded(Mod),
+    case erlang:function_exported(Mod, init, 1) of
+        true ->
+            Mod:init(Peer);
+        false ->
+            Mod:init()
+    end.
+
+deny_banner(Reason) when is_list(Reason) ->
+    case io_lib:printable_unicode_list(Reason) of
+        true ->
+            ["Access denied: ", Reason, "\r\n"];
+        false ->
+            io_lib:format("Access denied: ~p\r\n", [Reason])
+    end;
+deny_banner(Reason) ->
+    io_lib:format("Access denied: ~p\r\n", [Reason]).
+
 %% Remove all sigwinch entries in the received data, keeping the final one
 %% as the new terminal size. If we got part of a sigwinch entry return it
 %% to be placed back in the read buffer.

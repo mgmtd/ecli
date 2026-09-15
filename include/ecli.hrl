@@ -15,5 +15,8 @@
        list_action = show :: show | set,
        %% Pipe catalog for `|` after this command and its descendants.
        %% `undefined` inherits from the parent; `[]` disables pipes.
-       pipes = undefined :: undefined | list() | fun(() -> list()) | fun((term()) -> list())
+       pipes = undefined :: undefined | list() | fun(() -> list()) | fun((term()) -> list()),
+       %% Who may see and run this command. `ecli:permit/2` filters on it.
+       %% `any` — every session; `read` — show; `write` — configure / set / commit.
+       access = any :: any | read | write
     }).

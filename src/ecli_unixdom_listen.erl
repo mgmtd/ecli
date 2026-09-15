@@ -118,6 +118,9 @@ handle_info(finish_startup, #state{path = Path, ecli_mod = Mod} = State) ->
     file:delete(Path),
     case gen_tcp:listen(0, [{ifaddr, {local, Path}}, binary]) of
         {ok, Socket} ->
+            %% World-writable so other local uids can connect; the
+            %% kernel still tells us who they are via peer credentials.
+            _ = file:change_mode(Path, 8#0666),
             AcceptorPid = ecli_server:start_link(self(), Socket, Mod),
             {noreply, State#state{listen_socket = Socket,
                                   acceptor_pid = AcceptorPid}};

@@ -20,7 +20,9 @@
          format/1,
          format_table/2,
          format_menu/1,
-         format_simple_tree/1
+         format_simple_tree/1,
+         peercred/1,
+         permit/2
         ]).
 
 
@@ -120,6 +122,32 @@ unwrap_pipe(Out, Pipes) ->
         Text ->
             Text
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Unix-domain peer credentials of a connected CLI socket.
+%%      Empty map if the kernel does not report them.
+%% @end
+%%--------------------------------------------------------------------
+-spec peercred(inet:socket()) -> map().
+peercred(Socket) ->
+    ecli_unix:peercred(Socket).
+
+%%--------------------------------------------------------------------
+%% @doc Keep commands whose `access` is in `Allowed`. Untagged items
+%%      (schema maps, or `#cmd{}` with the default `any`) stay if
+%%      `any` is allowed, or if they have no `access` key.
+%% @end
+%%--------------------------------------------------------------------
+-spec permit(list(), [any | read | write]) -> list().
+permit(Tree, Allowed) when is_list(Tree), is_list(Allowed) ->
+    [C || C <- Tree, permitted(C, Allowed)].
+
+permitted(#cmd{access = A}, Allowed) ->
+    lists:member(A, Allowed);
+permitted(#{access := A}, Allowed) ->
+    lists:member(A, Allowed);
+permitted(_, _) ->
+    true.
 
 %%--------------------------------------------------------------------
 %% @doc Given a list of menu items format it for display inserting
